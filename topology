@@ -1,0 +1,20 @@
+graph "Network Topology" {
+	PREP_F2
+	"IG_LAB.cisco"
+	"IG_LAB.cisco" -- ap
+	"PREP_LAB.cisco"
+	"PREP_LAB.cisco" -- "PREP-Teacher-2"
+	"access-rootmanarAM3"
+	"access-rootmanarAM3" -- ap
+	"access-rootmanarAM3" -- ap
+	"access-rootmanarAM3" -- ap
+	"access-rootmanarAM3" -- "AMERICAN-ONLINE4"
+	"access-rootmanarAM3" -- "AMERICAN_Admin2.cisco"
+	"access-rootmanarAM3" -- "access-rootmanarAM"
+	"AMERICAN-CLASS"
+	"AMERICAN-CLASS" -- "F3-1"
+	"AMERICAN-CLASS" -- ap
+	"AMERICAN-CLASS" -- ap
+	"AMERICAN-CLASS" -- "access-rootmanarAM"
+	PREP_F5_sec
+}

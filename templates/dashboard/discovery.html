@@ -1,0 +1,285 @@
+{% extends "layout/base.html" %}
+{% block content %}
+
+<style>
+/* ── الألوان والمتغيرات ── */
+:root {
+  /* Dark Mode (Default) */
+  --bg: #060d14; --bg1: #091520; --bg2: #0c1e2e;
+  --border: #1a3040; --cyan: #00d4ff; --green: #00ff9d;
+  --amber: #ffb800; --red: #ff3860; --txt: #c8e8ff;
+  --txt2: #4a7a9a; --txt3: #2a5060; --mono: 'Courier New', monospace;
+}
+
+[data-theme="light"] {
+  --bg: #f0f4f8; --bg1: #ffffff; --bg2: #e1e8f0;
+  --border: #ced4da; --cyan: #007bff; --green: #28a745;
+  --amber: #f59e0b; --red: #dc3545; --txt: #1a202c;
+  --txt2: #4a5568; --txt3: #718096;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--txt); font-family: var(--mono); transition: background 0.3s; }
+
+/* ── Layout ── */
+.pg { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
+.grid { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+/* ── Theme Switcher ── */
+.theme-toggle {
+  cursor: pointer; padding: 8px 12px; border-radius: 20px;
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--cyan); font-size: 12px; display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Cards ── */
+.card { background: var(--bg1); border: 1px solid var(--border); border-radius: 10px; padding: 18px; transition: all 0.3s; }
+.sec {
+  font-size: 10px; letter-spacing: 2.5px; color: var(--txt3);
+  text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+}
+.sec::before { content: ''; width: 3px; height: 12px; background: var(--cyan); border-radius: 2px; }
+
+/* ── Inputs ── */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--txt3); margin-bottom: 5px; }
+.inp {
+  width: 100%; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 11px; color: var(--txt);
+  font-size: 12px; font-family: var(--mono); outline: none;
+}
+.inp:focus { border-color: var(--cyan); }
+
+/* ── Buttons ── */
+.scan-btn {
+  width: 100%; padding: 12px; border: none; border-radius: 8px;
+  background: var(--cyan); color: #fff; font-size: 13px;
+  font-weight: bold; cursor: pointer; letter-spacing: 1px;
+}
+.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Sonar Animation ── */
+.sonar-spinning { animation: sonar-spin 2s linear infinite; }
+@keyframes sonar-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+#sweepGroup { transform-origin: 140px 140px; }
+
+/* ── Device Cards ── */
+#device-list { max-height: 600px; overflow-y: auto; }
+.dev-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px;
+  border-bottom: 1px solid var(--border); transition: 0.2s;
+}
+.dev-card:hover { background: var(--bg2); }
+.badge { padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; }
+.badge-new { background: rgba(0, 212, 255, 0.1); color: var(--cyan); border: 1px solid var(--cyan); }
+.badge-upd { background: rgba(0, 255, 157, 0.1); color: var(--green); border: 1px solid var(--green); }
+
+/* ── Progress ── */
+.prog-wrap { height: 4px; background: var(--bg2); border-radius: 2px; margin-bottom: 15px; overflow: hidden; display: none; }
+.prog-fill { height: 100%; background: var(--cyan); width: 0%; transition: width 0.3s; }
+
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat { background: var(--bg1); border: 1px solid var(--border); padding: 10px; border-radius: 8px; text-align: center; }
+.stat-val { font-size: 20px; font-weight: bold; color: var(--cyan); }
+.stat-lbl { font-size: 9px; color: var(--txt3); margin-top: 4px; }
+</style>
+
+<div class="pg">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px">
+    <div>
+      <h1 style="color:var(--cyan); font-size:22px;">NETWORK DISCOVERY ENGINE</h1>
+      <p style="color:var(--txt3); font-size:11px;">Advanced SNMP & Topology Mapper</p>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">
+        <span>🌙 DARK MODE</span>
+      </button>
+      <a href="/" style="padding:8px 15px; border:1px solid var(--border); border-radius:20px; color:var(--txt2); text-decoration:none; font-size:12px;">← EXIT</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="side">
+      <div class="card" style="margin-bottom:15px; text-align:center;">
+        <svg width="240" height="240" viewBox="0 0 280 280">
+          <circle cx="140" cy="140" r="120" fill="none" stroke="var(--border)" stroke-width="1"/>
+          <circle cx="140" cy="140" r="80" fill="none" stroke="var(--border)" stroke-width="1"/>
+          <line x1="20" y1="140" x2="260" y2="140" stroke="var(--border)" stroke-width="1"/>
+          <line x1="140" y1="20" x2="140" y2="260" stroke="var(--border)" stroke-width="1"/>
+          <g id="sweepGroup">
+            <path d="M140 140 L240 140 A100 100 0 0 0 190 53 Z" fill="var(--cyan)" opacity="0.2"/>
+            <line x1="140" y1="140" x2="240" y2="140" stroke="var(--cyan)" stroke-width="2"/>
+          </g>
+        </svg>
+        <div id="sonarStatus" style="font-size:11px; color:var(--txt3); margin-top:10px;">SYSTEM READY</div>
+      </div>
+
+      <div class="card">
+        <div class="sec">DISCOVERY CONFIG</div>
+        <div class="field">
+          <label>IP RANGE / SEED IP</label>
+          <input class="inp" id="network" value="192.168.70.0/24">
+        </div>
+        <div class="field">
+          <label>SNMP COMMUNITY</label>
+          <input class="inp" id="community" value="private">
+        </div>
+        <div class="field">
+          <label>MODE</label>
+          <select class="inp" id="method">
+            <option value="both">Full Discovery (SNMP + Smart)</option>
+            <option value="snmp">New Devices Only (SNMP Scan)</option>
+            <option value="smart">Neighbors Discovery (CDP/LLDP)</option>
+          </select>
+        </div>
+        <button class="scan-btn" id="scanBtn" onclick="initiateDiscovery()">START DISCOVERY</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="stats-row">
+        <div class="stat"><div class="stat-val" id="s-found">0</div><div class="stat-lbl">DEVICES</div></div>
+        <div class="stat"><div class="stat-val" id="s-new" style="color:var(--green)">0</div><div class="stat-lbl">NEW</div></div>
+        <div class="stat"><div class="stat-val" id="s-upd" style="color:var(--amber)">0</div><div class="stat-lbl">UPDATED</div></div>
+        <div class="stat"><div class="stat-val" id="s-log" style="color:var(--txt3)">0</div><div class="stat-lbl">LOGS</div></div>
+      </div>
+
+      <div class="prog-wrap" id="progWrap"><div class="prog-fill" id="progFill"></div></div>
+
+      <div class="card" style="padding:0;">
+        <div style="padding:15px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; font-weight:bold;">LIVE RESULTS</span>
+          <button onclick="clearResults()" style="background:none; border:none; color:var(--red); cursor:pointer; font-size:10px;">CLEAR ALL</button>
+        </div>
+        <div id="device-list">
+          <div style="padding:40px; text-align:center; color:var(--txt3); font-size:12px;">No active scans. Please configure and start.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let isScanning = false;
+let foundCount = 0, newCount = 0, updCount = 0;
+
+// ── Theme Engine ──
+function toggleTheme() {
+  const body = document.body;
+  const btn = document.getElementById('themeBtn');
+  if (body.getAttribute('data-theme') === 'light') {
+    body.removeAttribute('data-theme');
+    btn.innerHTML = '🌙 DARK MODE';
+  } else {
+    body.setAttribute('data-theme', 'light');
+    btn.innerHTML = '☀️ LIGHT MODE';
+  }
+}
+
+// ── Discovery Engine ──
+async function initiateDiscovery() {
+  if (isScanning) return;
+  startUI();
+
+  const network = document.getElementById('network').value;
+  const community = document.getElementById('community').value;
+  const method = document.getElementById('method').value;
+
+  try {
+    // 1. SNMP Auto Discovery (الرابط الأول)
+    if (method === 'snmp' || method === 'both') {
+      updateStatus("Scanning Network Range...");
+      updateProgress(30);
+      const res = await fetch('/api/discover/', { // استخدمنا الرابط auto_discovery_api
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ network, community })
+      });
+      const data = await res.json();
+      processItems(data.discovered || data.switches || []);
+    }
+
+    // 2. Smart Discovery (الرابط الثاني)
+    if (method === 'smart' || method === 'both') {
+      updateStatus("Analyzing Topology (CDP/LLDP)...");
+      updateProgress(70);
+      const seedIp = network.split('/')[0];
+      const res = await fetch('/api/smart-discovery/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ seed_ip: seedIp, community })
+      });
+      const data = await res.json();
+      processItems(data.discovered || []);
+    }
+
+    updateStatus("Discovery Completed Successfully");
+    updateProgress(100);
+  } catch (err) {
+    console.error(err);
+    updateStatus("Discovery Failed: API Error", true);
+  } finally {
+    stopUI();
+  }
+}
+
+function processItems(items) {
+  const container = document.getElementById('device-list');
+  if (foundCount === 0) container.innerHTML = '';
+
+  items.forEach(item => {
+    foundCount++;
+    if (item.created) newCount++; else updCount++;
+    
+    const card = document.createElement('div');
+    card.className = 'dev-card';
+    card.innerHTML = `
+      <div style="width:10px; height:10px; border-radius:50%; background:${item.created ? 'var(--cyan)' : 'var(--green)'}"></div>
+      <div style="flex:1">
+        <div style="font-size:13px; font-weight:bold">${item.hostname || 'Unknown'}</div>
+        <div style="font-size:11px; color:var(--txt3)">${item.ip} • ${item.model || 'Generic Device'}</div>
+      </div>
+      <span class="badge ${item.created ? 'badge-new' : 'badge-upd'}">${item.created ? 'NEW' : 'UPDATED'}</span>
+    `;
+    container.prepend(card);
+  });
+  updateStats();
+}
+
+function updateStats() {
+  document.getElementById('s-found').innerText = foundCount;
+  document.getElementById('s-new').innerText = newCount;
+  document.getElementById('s-upd').innerText = updCount;
+}
+
+function updateProgress(val) {
+  document.getElementById('progFill').style.width = val + '%';
+}
+
+function updateStatus(msg, isError = false) {
+  const s = document.getElementById('sonarStatus');
+  s.innerText = msg;
+  s.style.color = isError ? 'var(--red)' : 'var(--txt3)';
+}
+
+function startUI() {
+  isScanning = true;
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('progWrap').style.display = 'block';
+  document.getElementById('sweepGroup').classList.add('sonar-spinning');
+}
+
+function stopUI() {
+  isScanning = false;
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('sweepGroup').classList.remove('sonar-spinning');
+}
+
+function clearResults() {
+  document.getElementById('device-list').innerHTML = '<div style="padding:40px; text-align:center; color:var(--txt3); font-size:12px;">Results cleared.</div>';
+  foundCount = 0; newCount = 0; updCount = 0; updateStats();
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+
+<h2>Switches</h2>
+
+<div id="switches"></div>
+
+<script>
+
+async function loadSwitches(){
+
+    let res = await fetch("/api/dashboard/")
+    let data = await res.json()
+
+    let html = ""
+
+    let switches = await fetch("/api/network-map/")
+    let topo = await switches.json()
+
+    topo.nodes.forEach(sw => {
+
+        html += `
+        <div style="
+            background:#111;
+            padding:15px;
+            margin:10px;
+            border-radius:8px;
+        ">
+            <h3>${sw.id}</h3>
+            <p>${sw.ip}</p>
+            <p>Status: ${sw.status}</p>
+
+            <div id="ports-${sw.id}" style="display:flex;flex-wrap:wrap;"></div>
+        </div>
+        `
+    })
+
+    document.getElementById("switches").innerHTML = html
+
+}
+
+loadSwitches()
+
+</script>
+
+{% endblock %}

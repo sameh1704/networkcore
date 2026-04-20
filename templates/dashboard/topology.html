@@ -1,0 +1,162 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+
+<style>
+#topology-container {
+    width: 100%;
+    height: 600px;
+    background: #0f172a;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.tooltip {
+    position: absolute;
+    background: #111;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 5px;
+    pointer-events: none;
+    opacity: 0;
+}
+</style>
+
+<h2>Network Topology</h2>
+
+<div id="topology-container">
+    <svg width="100%" height="600"></svg>
+    <div class="tooltip" id="tooltip"></div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script>
+
+async function loadTopology(){
+
+    const svg = d3.select("svg")
+    svg.selectAll("*").remove()
+
+    let data = await fetch("/api/network-map/").then(r => r.json())
+
+    const width = document.getElementById("topology-container").clientWidth
+    const height = 600
+
+    const tooltip = d3.select("#tooltip")
+
+    // 🔥 تحسين الأداء
+    const simulation = d3.forceSimulation(data.nodes)
+        .force("link", d3.forceLink(data.links).id(d => d.id).distance(120))
+        .force("charge", d3.forceManyBody().strength(-250))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide().radius(60))
+
+    // 🔹 links
+    const link = svg.append("g")
+        .selectAll("line")
+        .data(data.links)
+        .enter()
+        .append("line")
+        .attr("stroke", "#555")
+        .attr("stroke-width", d => d.traffic / 20)
+
+    // 🔹 traffic label
+    const linkLabel = svg.append("g")
+        .selectAll("text")
+        .data(data.links)
+        .enter()
+        .append("text")
+        .text(d => d.traffic + " Mbps")
+        .attr("fill", "#ccc")
+        .attr("font-size", 10)
+
+    // 🔹 nodes group
+    const node = svg.append("g")
+        .selectAll("g")
+        .data(data.nodes)
+        .enter()
+        .append("g")
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended)
+        )
+
+    // 🔥 أيقونة Switch SVG
+    node.append("rect")
+        .attr("width", 90)
+        .attr("height", 40)
+        .attr("rx", 8)
+        .attr("fill", d => d.status === "online" ? "#22c55e" : "#ef4444")
+
+    // 🔹 اسم
+    node.append("text")
+        .text(d => d.id)
+        .attr("x", 10)
+        .attr("y", 15)
+        .attr("fill", "white")
+        .attr("font-size", 11)
+
+    // 🔹 IP
+    node.append("text")
+        .text(d => d.ip)
+        .attr("x", 10)
+        .attr("y", 30)
+        .attr("fill", "#ddd")
+        .attr("font-size", 10)
+
+    // 🔥 Tooltip
+    node.on("mouseover", (event, d) => {
+        tooltip.style("opacity", 1)
+            .html(`<b>${d.id}</b><br>${d.ip}<br>Status: ${d.status}`)
+    })
+    .on("mousemove", (event) => {
+        tooltip.style("left", (event.pageX + 10) + "px")
+               .style("top", (event.pageY + 10) + "px")
+    })
+    .on("mouseout", () => {
+        tooltip.style("opacity", 0)
+    })
+
+    simulation.on("tick", () => {
+
+        link
+            .attr("x1", d => d.source.x + 45)
+            .attr("y1", d => d.source.y + 20)
+            .attr("x2", d => d.target.x + 45)
+            .attr("y2", d => d.target.y + 20)
+
+        linkLabel
+            .attr("x", d => (d.source.x + d.target.x) / 2)
+            .attr("y", d => (d.source.y + d.target.y) / 2)
+
+        node
+            .attr("transform", d => `translate(${d.x},${d.y})`)
+    })
+
+    function dragstarted(event, d){
+        if (!event.active) simulation.alphaTarget(0.3).restart()
+        d.fx = d.x
+        d.fy = d.y
+    }
+
+    function dragged(event, d){
+        d.fx = event.x
+        d.fy = event.y
+    }
+
+    function dragended(event, d){
+        if (!event.active) simulation.alphaTarget(0)
+        d.fx = null
+        d.fy = null
+    }
+}
+
+loadTopology()
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,1603 @@
+{% extends "layout/base.html" %}
+{% block content %}
+
+<!-- ══ Tooltip ══ -->
+<div id="tt" style="position:fixed;background:#06101a;border:1px solid #00d4ff33;
+  border-radius:8px;padding:10px 14px;font-size:12px;color:#c8e8ff;pointer-events:none;
+  z-index:9999;display:none;line-height:1.9;min-width:220px;font-family:monospace;
+  box-shadow:0 8px 28px #000000aa"></div>
+
+<style>
+/* ── Animations ── */
+@keyframes blink-up { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes blink-wrn { 0%,100%{opacity:1} 50%{opacity:0.12} }
+@keyframes blink-err { 0%,100%{opacity:1} 50%{opacity:0.05} }
+@keyframes blink-dn { 0%,100%{opacity:0.3} 50%{opacity:0.08} }
+@keyframes spin { to{transform:rotate(360deg)} }
+@keyframes fadein { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+@keyframes pulse-red { 0%,100%{box-shadow:0 0 0 0 #ff386044} 50%{box-shadow:0 0 0 4px #ff386000} }
+@keyframes pulse-amber { 0%,100%{box-shadow:0 0 0 0 #ffb80044} 50%{box-shadow:0 0 0 4px #ffb80000} }
+
+.led-up  { animation:blink-up 1.2s ease-in-out infinite }
+.led-wrn { animation:blink-wrn 0.8s ease-in-out infinite }
+.led-err { animation:blink-err 0.4s ease-in-out infinite }
+.led-dn  { animation:blink-dn 3s ease-in-out infinite }
+.spin    { animation:spin .7s linear infinite;display:inline-block }
+.fadein  { animation:fadein .25s ease }
+.pulse-red { animation:pulse-red 1.5s ease-in-out infinite }
+.pulse-amber { animation:pulse-amber 1.5s ease-in-out infinite }
+
+/* ── Layout ── */
+:root{--bg:#050d16;--bg1:#081520;--bg2:#0a1c2c;--border:#1a3040;
+     --cyan:#00d4ff;--green:#00ff9d;--amber:#ffb800;--red:#ff3860;
+     --txt:#c8e8ff;--txt2:#4a7a9a;--txt3:#2a5060;--mono:monospace}
+body{background:var(--bg)}
+.pg{padding:20px;max-width:1400px;margin:0 auto;font-family:var(--mono)}
+
+/* ── Header ── */
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;
+     margin-bottom:22px;gap:16px;flex-wrap:wrap}
+.hdr-left h1{color:var(--cyan);margin:0;font-size:22px;letter-spacing:1px}
+.hdr-left .sub{color:var(--txt3);font-size:12px;margin-top:4px}
+.back{padding:7px 16px;border:1px solid var(--border);border-radius:6px;
+      color:var(--cyan);text-decoration:none;font-size:12px;white-space:nowrap;
+      transition:border-color .2s}
+.back:hover{border-color:var(--cyan)}
+
+/* ── Stat cards ── */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+          gap:10px;margin-bottom:18px}
+.stat{background:var(--bg1);border:1px solid var(--border);border-radius:8px;
+      padding:12px 14px;transition:all .2s}
+.stat:hover{border-color:var(--cyan);background:#0a1825}
+.stat-lbl{font-size:10px;color:var(--txt3);letter-spacing:1.5px;margin-bottom:5px}
+.stat-val{font-size:20px;font-weight:bold;color:var(--cyan)}
+.stat-sub{font-size:11px;color:var(--txt2);margin-top:2px}
+.stat-critical{background:#ff386010;border-color:#ff3860}
+.stat-warning{background:#ffb80010;border-color:#ffb800}
+
+/* ── Section title ── */
+.sec{color:var(--cyan);font-size:11px;letter-spacing:2.5px;margin:20px 0 8px;
+     display:flex;align-items:center;gap:8px;text-transform:uppercase}
+.sec::before{content:'';display:inline-block;width:3px;height:13px;
+             background:var(--cyan);border-radius:2px}
+.sec-actions{margin-left:auto;display:flex;gap:6px}
+.refresh-btn{background:transparent;border:1px solid var(--border);
+             color:var(--txt2);border-radius:4px;padding:2px 8px;
+             font-size:10px;cursor:pointer;font-family:var(--mono)}
+.refresh-btn:hover{color:var(--cyan);border-color:var(--cyan)}
+
+/* ── Cards ── */
+.card{background:var(--bg1);border:1px solid var(--border);border-radius:10px;
+      padding:16px;margin-bottom:4px}
+.card-0{padding:0;overflow:hidden}
+.card-critical{background:#ff386008;border-color:#ff386033}
+.card-warning{background:#ffb80008;border-color:#ffb80033}
+
+/* ── Tab bar ── */
+.tabs{display:flex;gap:2px;flex-wrap:wrap;background:var(--bg);
+      padding:6px;border-radius:10px;margin-bottom:14px;border:1px solid var(--border)}
+.tab{padding:7px 14px;border-radius:7px;font-size:11px;letter-spacing:1px;
+     color:var(--txt2);cursor:pointer;border:none;background:transparent;
+     transition:all .18s;white-space:nowrap;font-family:var(--mono)}
+.tab:hover{color:var(--txt);background:var(--bg2)}
+.tab.active{background:var(--bg2);color:var(--cyan);border:1px solid var(--border)}
+.tab-badge{display:inline-block;background:#ff386022;color:var(--red);
+           border-radius:3px;font-size:10px;padding:1px 5px;margin-left:4px}
+.tab-badge.ok{background:#00ff9d18;color:var(--green)}
+
+/* ── Panels ── */
+.panel{display:none}.panel.active{display:block;animation:fadein .2s ease}
+
+/* ── Tables ── */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl thead th{background:#060f18;color:var(--txt3);padding:8px 12px;
+              text-align:left;border-bottom:1px solid var(--border);
+              font-size:10px;letter-spacing:1.5px;white-space:nowrap}
+.tbl tbody td{padding:7px 12px;border-bottom:1px solid #0a1820;
+              vertical-align:middle;white-space:nowrap}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#0c1e2e55}
+.tbl tbody tr.critical-row{background:#ff386008}
+.tbl tbody tr.warning-row{background:#ffb80008}
+
+/* ── Status pills ── */
+.pill{display:inline-block;padding:2px 8px;border-radius:3px;
+      font-size:10px;letter-spacing:.5px}
+.pill-up   {background:#00c85322;color:#00c853;border:1px solid #00c85333}
+.pill-dn   {background:#1e2d3e;  color:#3a6a8a;border:1px solid #1e3040}
+.pill-err  {background:#ff386022;color:var(--red);border:1px solid #ff386033}
+.pill-wrn  {background:#ffb80018;color:var(--amber);border:1px solid #ffb80033}
+.pill-dis  {background:#1a1a2a;  color:#555;border:1px solid #222}
+.pill-info {background:#00d4ff18;color:var(--cyan);border:1px solid #00d4ff33}
+
+/* ── Progress bar ── */
+.pb-bg{height:5px;background:#0f1e2e;border-radius:3px;overflow:hidden;width:80px}
+.pb-fg{height:100%;border-radius:3px;transition:width .4s}
+
+/* ── Filter row ── */
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.filter-inp{background:var(--bg2);border:1px solid var(--border);border-radius:6px;
+            padding:6px 10px;color:var(--txt);font-size:12px;font-family:var(--mono);
+            outline:none;width:180px}
+.filter-inp:focus{border-color:var(--cyan)}
+.filter-btn{padding:5px 10px;border:1px solid var(--border);border-radius:5px;
+            background:transparent;color:var(--txt2);font-size:11px;
+            cursor:pointer;font-family:var(--mono);transition:all .15s}
+.filter-btn:hover,.filter-btn.active{background:var(--bg2);
+  color:var(--cyan);border-color:var(--cyan)}
+
+/* ── SVG Switch ── */
+.switch-svg-container{background:var(--bg1);border-radius:10px;
+                      padding:8px;border:1px solid var(--border)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--txt2)}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.port-g{cursor:pointer}
+.port-g:hover rect{filter:brightness(1.3);stroke:var(--cyan);stroke-width:.8}
+
+/* ── Info grid ── */
+.info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+           gap:10px}
+.info-item{background:var(--bg2);border-radius:6px;padding:10px 12px}
+.info-k{font-size:10px;color:var(--txt3);letter-spacing:1px;margin-bottom:3px}
+.info-v{font-size:13px;color:var(--txt)}
+
+/* ── Loading skeleton ── */
+.skel{background:linear-gradient(90deg,var(--bg2) 25%,#0d2035 50%,var(--bg2) 75%);
+      background-size:200% 100%;animation:skel 1.2s ease infinite;
+      border-radius:4px;height:14px}
+@keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── Risk indicator ── */
+.risk-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;
+                margin-right:6px}
+.risk-good{background:var(--green);box-shadow:0 0 4px var(--green)}
+.risk-warning{background:var(--amber);box-shadow:0 0 4px var(--amber);animation:pulse-amber 1s infinite}
+.risk-critical{background:var(--red);box-shadow:0 0 4px var(--red);animation:pulse-red 1s infinite}
+
+/* ── Prediction cards ── */
+.pred-card{background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:8px}
+.pred-title{font-size:11px;color:var(--txt3);margin-bottom:5px}
+.pred-value{font-size:13px;color:var(--txt)}
+.pred-action{font-size:10px;color:var(--cyan);margin-top:6px}
+
+/* ── Responsive ── */
+@media (max-width:768px){
+  .pg{padding:12px}
+  .stat-val{font-size:16px}
+  .tab{padding:4px 8px;font-size:9px}
+  .tbl{font-size:10px}
+  .tbl thead th,.tbl tbody td{padding:4px 6px}
+}
+</style>
+
+<div class="pg">
+
+<!-- ── Header ── -->
+<div class="hdr">
+  <div class="hdr-left">
+    <h1 id="sw-hostname">{{ switch.hostname }}</h1>
+    <div class="sub">
+      <span id="sw-ip">{{ switch.ip_address }}</span>
+      &nbsp;·&nbsp;<span id="h-model">—</span>
+      &nbsp;·&nbsp;<span id="h-ios">—</span>
+    </div>
+    <div class="sub" style="margin-top:3px">
+      Uptime: <span id="h-uptime" style="color:var(--green)">—</span>
+      &nbsp;·&nbsp;Location: <span id="h-loc">—</span>
+      &nbsp;·&nbsp;Serial: <span id="h-serial">—</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px">
+    <button class="back" onclick="refreshAllData()" style="cursor:pointer">
+      🔄 REFRESH
+    </button>
+    <a href="/" class="back">← BACK</a>
+  </div>
+</div>
+
+<!-- ── Stat cards ── -->
+<div class="stat-row" id="stat-cards">
+  <div class="stat">
+    <div class="stat-lbl">CPU 5s / 1m / 5m</div>
+    <div class="stat-val" id="sc-cpu">—</div>
+    <div class="stat-sub" id="sc-cpu-sub">Fetching…</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">MEMORY</div>
+    <div class="stat-val" id="sc-mem">—</div>
+    <div class="stat-sub" id="sc-mem-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">PORTS UP</div>
+    <div class="stat-val" id="sc-up" style="color:var(--green)">—</div>
+    <div class="stat-sub" id="sc-up-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">PORTS ERROR</div>
+    <div class="stat-val" id="sc-err" style="color:var(--red)">—</div>
+    <div class="stat-sub">with errors/discards</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">POE USED</div>
+    <div class="stat-val" id="sc-poe" style="color:var(--amber)">—</div>
+    <div class="stat-sub" id="sc-poe-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">CDP NEIGHBORS</div>
+    <div class="stat-val" id="sc-cdp" style="color:var(--cyan)">—</div>
+    <div class="stat-sub">discovered</div>
+  </div>
+</div>
+
+<!-- ══ TABS ══ -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('panel-sw','this')">SWITCH PANEL</button>
+  <button class="tab" onclick="switchTab('panel-interfaces','this')">INTERFACES</button>
+  <button class="tab" onclick="switchTab('panel-errors','this')">ERRORS <span id="tab-err-badge" class="tab-badge" style="display:none">0</span></button>
+  <button class="tab" onclick="switchTab('panel-vlans','this')">VLANS</button>
+  <button class="tab" onclick="switchTab('panel-cdp','this')">CDP NEIGHBORS</button>
+  <button class="tab" onclick="switchTab('panel-poe','this')">POWER INLINE</button>
+  <button class="tab" onclick="switchTab('panel-portsec','this')">PORT-SECURITY</button>
+  <button class="tab" onclick="switchTab('panel-mac','this')">MAC TABLE</button>
+  <button class="tab" onclick="switchTab('panel-ip','this')">IP BRIEF</button>
+  <button class="tab" onclick="switchTab('panel-tdr','this')">TDR</button>
+  <button class="tab" onclick="switchTab('panel-predictions','this')">🔮 PREDICTIONS</button>
+  <button class="tab" onclick="switchTab('panel-health','this')">🏥 HEALTH</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 1 — SWITCH VISUAL PANEL
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-sw" class="panel active">
+  <div class="switch-svg-container">
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:11px" id="sw-meta">
+      {{ switch.hostname }} · {{ switch.ip_address }} · 48 Ports
+    </div>
+    <svg id="sw-svg" viewBox="0 0 590 78" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;height:auto;display:block;border-radius:4px"></svg>
+    <div class="legend">
+      <div class="leg"><div class="dot" style="background:#00c853"></div>Connected / Up</div>
+      <div class="leg"><div class="dot" style="background:#ffb800"></div>Warning (>300 Mbps)</div>
+      <div class="leg"><div class="dot" style="background:#ff3860"></div>Error / Critical</div>
+      <div class="leg"><div class="dot" style="background:#1e2d3e"></div>Not Connected</div>
+      <div class="leg"><div class="dot" style="background:#111"></div>Disabled</div>
+    </div>
+  </div>
+
+  <!-- AI Diagnosis -->
+  <div class="sec">🤖 AI DIAGNOSIS</div>
+  <div class="card" id="ai-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="font-size:10px;color:var(--txt3);letter-spacing:1.5px">ROOT CAUSE</div>
+      <div id="ai-live-status" class="pill pill-info">API FALLBACK</div>
+    </div>
+    <div id="ai-root" style="font-size:14px;color:var(--green);margin-top:6px">
+      Loading diagnosis...
+    </div>
+    <div id="ai-iss" style="margin-top:9px;font-size:12px;color:#7ab0ce;line-height:2"></div>
+    <div id="ai-recommend" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+         font-size:11px;color:var(--amber)"></div>
+  </div>
+
+  <!-- Duplex & Loop Detection -->
+  <div class="sec">⚠️ NETWORK ISSUES</div>
+  <div class="card" id="issues-card">
+    <div style="color:var(--txt3);font-size:12px">Loading issues...</div>
+  </div>
+
+  <!-- Predictions Summary -->
+  <div class="sec">🔮 PREDICTIONS SUMMARY</div>
+  <div class="card" id="pred-summary-card">
+    <div style="color:var(--txt3);font-size:12px">Loading predictions...</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 2 — INTERFACES
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-interfaces" class="panel">
+  <div class="filter-row">
+    <input class="filter-inp" id="iface-search" placeholder="Search port…" oninput="filterIface()">
+    <button class="filter-btn active" onclick="setIfaceFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setIfaceFilter('connected',this)">Connected</button>
+    <button class="filter-btn" onclick="setIfaceFilter('notconnect',this)">Not Connected</button>
+    <button class="filter-btn" onclick="setIfaceFilter('disabled',this)">Disabled</button>
+    <button class="filter-btn" onclick="setIfaceFilter('err',this)">Has Errors</button>
+    <button class="filter-btn" onclick="loadIfaces()" style="margin-left:auto">↻ Refresh</button>
+  </div>
+  <div class="card card-0">
+    <table class="tbl" id="iface-tbl">
+      <thead>
+        <tr><th>PORT</th><th>ALIAS</th><th>STATUS</th>
+        <th>SPEED</th><th>IN</th><th>OUT</th>
+        <th>TRAFFIC</th><th>IN ERR</th><th>OUT ERR</th>
+        <th>IN DISC</th><th>OUT DISC</th><th>MTU</th>
+      </tr></thead>
+      <tbody id="iface-body">
+        <tr><td colspan="12" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 3 — ERRORS
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-errors" class="panel">
+  <div class="card" id="err-summary" style="background:#180414;border-color:#ff386033;font-size:12px;color:var(--txt2);margin-bottom:12px">
+    Loading error analysis…
+  </div>
+  <div class="card card-0">
+    <table class="tbl" id="err-tbl">
+      <thead><tr>
+        <th>PORT</th><th>IN ERRORS</th><th>OUT ERRORS</th>
+        <th>IN DISCARDS</th><th>OUT DISCARDS</th>
+        <th>SEVERITY</th><th>CAUSE</th><th>RECOMMENDATION</th>
+      </tr></thead>
+      <tbody id="err-body">
+        <tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 4 — VLANS
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-vlans" class="panel">
+  <div class="card card-0">
+    <table class="tbl" id="vlan-tbl">
+      <thead><tr>
+        <th>VLAN</th><th>NAME</th><th>STATUS</th>
+        <th>PORTS</th><th>ACTIVE PORTS</th>
+      </tr></thead>
+      <tbody id="vlan-body">
+        <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 5 — CDP
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-cdp" class="panel">
+  <div class="card card-0">
+    <table class="tbl" id="cdp-tbl">
+      <thead><tr>
+        <th>LOCAL PORT</th><th>DEVICE ID</th>
+        <th>IP ADDRESS</th><th>PLATFORM</th><th>REMOTE PORT</th>
+      <tr></thead>
+      <tbody id="cdp-body">
+        <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 6 — PoE
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-poe" class="panel">
+  <div class="stat-row" id="poe-stats" style="margin-bottom:14px">
+    <div class="stat"><div class="stat-lbl">TOTAL BUDGET</div>
+      <div class="stat-val" id="poe-total">—</div><div class="stat-sub">Watts</div></div>
+    <div class="stat"><div class="stat-lbl">CONSUMED</div>
+      <div class="stat-val" id="poe-used" style="color:var(--amber)">—</div><div class="stat-sub">Watts</div></div>
+    <div class="stat"><div class="stat-lbl">AVAILABLE</div>
+      <div class="stat-val" id="poe-avail" style="color:var(--green)">—</div><div class="stat-sub">Watts</div></div>
+    <div class="stat"><div class="stat-lbl">FAULTY PORTS</div>
+      <div class="stat-val" id="poe-fault" style="color:var(--red)">—</div><div class="stat-sub">fault / deny</div></div>
+  </div>
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setPoeFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setPoeFilter('on',this)">ON</button>
+    <button class="filter-btn" onclick="setPoeFilter('off',this)">OFF</button>
+    <button class="filter-btn" onclick="setPoeFilter('fault',this)">Fault / Deny</button>
+  </div>
+  <div class="card card-0">
+    <table class="tbl" id="poe-tbl">
+      <thead><tr><th>PORT</th><th>STATUS</th><th>POWER (W)</th><th>CLASS</th></tr></thead>
+      <tbody id="poe-body">
+        <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 7 — PORT SECURITY
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-portsec" class="panel">
+  <div id="psec-summary" class="card" style="font-size:12px;color:var(--txt2);margin-bottom:12px">Loading…</div>
+  <div class="card card-0">
+    <table class="tbl" id="psec-tbl">
+      <thead><tr><th>PORT</th><th>STATUS</th><th>MAX MAC</th><th>CURRENT MAC</th><th>VIOLATION MODE</th></tr></thead>
+      <tbody id="psec-body">
+        <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 8 — MAC TABLE
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-mac" class="panel">
+  <div class="filter-row">
+    <input class="filter-inp" id="mac-port-filter" list="mac-port-list" placeholder="Filter by port (e.g. Fa1/0/1)">
+    <datalist id="mac-port-list"></datalist>
+    <button class="filter-btn" onclick="loadMac()">Apply</button>
+    <button class="filter-btn" onclick="document.getElementById('mac-port-filter').value='';loadMac()">Clear</button>
+    <span id="mac-count" style="color:var(--txt3);font-size:11px;margin-left:8px"></span>
+  </div>
+  <div class="card card-0">
+    <table class="tbl" id="mac-tbl">
+      <thead><tr><th>MAC ADDRESS</th><th>PORT</th><th>TYPE</th></tr></thead>
+      <tbody id="mac-body">
+        <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 9 — IP BRIEF
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-ip" class="panel">
+  <div class="card card-0">
+    <table class="tbl" id="ip-tbl">
+      <thead><tr><th>INTERFACE</th><th>IP ADDRESS</th><th>SUBNET MASK</th><th>STATUS</th></tr></thead>
+      <tbody id="ip-body">
+        <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 10 — TDR
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-tdr" class="panel">
+  <div class="card" style="margin-bottom:12px;font-size:12px;
+       color:var(--txt2);line-height:1.8">
+    <span style="color:var(--amber)">⚠</span>
+    TDR يُشغَّل من الـ CLI بأمر
+    <code style="color:var(--cyan)">test cable-diagnostics tdr interface Fa1/0/X</code>.
+    الصفحة تعرض آخر نتيجة متاحة عبر SNMP.
+    <br>
+    <span style="color:var(--txt3);font-size:11px">
+      اختر المنفذ ثم اضغط Launch TDR لتشغيل الاختبار (يحتاج SNMP write community).
+    </span>
+  </div>
+
+  <div class="filter-row">
+    <select id="tdr-port-sel" class="filter-inp" style="width:200px">
+      <option value="">— Select port —</option>
+    </select>
+    <button class="filter-btn" onclick="loadTdr()">↻ Refresh Results</button>
+  </div>
+
+  <div class="card card-0">
+    <table class="tbl" id="tdr-tbl">
+      <thead><tr>
+        <th>PORT</th><th>CABLE STATUS</th>
+        <th>LENGTH (m)</th><th>DIAGNOSIS</th>
+      </tr></thead>
+      <tbody id="tdr-body">
+        <tr><td colspan="4" style="text-align:center;padding:20px;
+            color:var(--txt3)">Loading…<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 11 — PREDICTIONS (توقع الأعطال)
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-predictions" class="panel">
+  <div class="sec">📊 RISK SCORE</div>
+  <div class="card" id="risk-card">
+    <div style="text-align:center;padding:20px" id="risk-display">
+      <div style="font-size:36px;font-weight:bold" id="risk-score">--</div>
+      <div style="font-size:11px;color:var(--txt3)" id="risk-level">Analyzing...</div>
+    </div>
+  </div>
+
+  <div class="sec">🔮 CABLE FAILURE PREDICTION</div>
+  <div class="card" id="cable-pred-card">
+    <div style="color:var(--txt3);font-size:12px">Loading...</div>
+  </div>
+
+  <div class="sec">💻 CPU CRASH PREDICTION</div>
+  <div class="card" id="cpu-pred-card">
+    <div style="color:var(--txt3);font-size:12px">Loading...</div>
+  </div>
+
+  <div class="sec">📡 BROADCAST STORM RISK</div>
+  <div class="card" id="storm-pred-card">
+    <div style="color:var(--txt3);font-size:12px">Loading...</div>
+  </div>
+
+  <div class="sec">🔌 PORT OVERLOAD PREDICTION</div>
+  <div class="card card-0" id="overload-pred-card">
+    <div style="padding:16px;color:var(--txt3);font-size:12px">Loading...</div>
+  </div>
+
+  <div class="sec">📏 CABLE LENGTH ESTIMATION (بدون TDR)</div>
+  <div class="card card-0">
+    <table class="tbl" id="cable-estimate-tbl">
+      <thead><tr><th>PORT</th><th>SIGNAL</th><th>EST. LENGTH</th><th>QUALITY</th></tr></thead>
+      <tbody id="cable-estimate-body">
+        <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--txt3)">Loading...<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PANEL 12 — HEALTH REPORT
+═══════════════════════════════════════════════════════════════════ -->
+<div id="panel-health" class="panel">
+  <div class="sec">🏥 OVERALL HEALTH</div>
+  <div class="card" id="health-status-card">
+    <div style="text-align:center;padding:20px">
+      <div style="font-size:28px;font-weight:bold" id="health-status">—</div>
+      <div style="font-size:11px;color:var(--txt3)" id="health-message">Analyzing...</div>
+    </div>
+  </div>
+
+  <div class="sec">📊 SYSTEM SUMMARY</div>
+  <div class="card">
+    <div class="info-grid" id="system-summary"></div>
+  </div>
+
+  <div class="sec">⚠️ ISSUES DETECTED</div>
+  <div class="card card-0">
+    <table class="tbl" id="issues-tbl">
+      <thead><tr><th>SEVERITY</th><th>ISSUE</th><th>RECOMMENDATION</th></tr></thead>
+      <tbody id="issues-body">
+        <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--txt3)">Loading...<\/td><\/tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sec">🔄 LOOPS & DUPLEX ISSUES</div>
+  <div class="card">
+    <div id="loops-duplex-info" style="font-size:12px;color:var(--txt2)">Loading...</div>
+  </div>
+
+  <div class="sec">📋 RECOMMENDATIONS</div>
+  <div class="card" id="recommendations-card">
+    <div style="color:var(--txt3);font-size:12px">Loading...</div>
+  </div>
+</div>
+
+</div><!-- /pg -->
+
+<script>
+"use strict";
+const HOSTNAME = "{{ switch.hostname }}";
+const SW_IP = "{{ switch.ip_address }}";
+const API = (ep, qs="") => `/api/switch/${HOSTNAME}/${ep}/${qs ? "?" + qs : ""}`;
+
+/* ── Port colors configuration ── */
+const PC = {
+  up      :{body:"#061c10",border:"#1a5030",led:"#00c853",cls:"led-up", lbl:"Connected"},
+  down    :{body:"#0b1820",border:"#1c2c3c",led:"#1c3040",cls:"led-dn", lbl:"Not Connected"},
+  disabled:{body:"#0e0e18",border:"#1a1a28",led:"#111",   cls:"led-dn", lbl:"Disabled"},
+  wrn     :{body:"#181000",border:"#483600",led:"#ffb800",cls:"led-wrn",lbl:"Warning (>300M)"},
+  err     :{body:"#180410",border:"#480e1e",led:"#ff3860",cls:"led-err",lbl:"Error/Critical"},
+};
+const STATUS2PC = {
+  "connected":"up","notconnect":"down","disabled":"disabled",
+  "up":"up","down":"down","err":"err","wrn":"wrn"
+};
+
+/* ── Global state ── */
+let ALL_PORTS = [];
+let ALL_VLANS = [];
+let ALL_IFACES = [];
+let ALL_POE = [];
+let ALL_CDP = [];
+let ifaceFilter = "all";
+let poeFilter = "all";
+let wsData = null;
+let svgPortNodes = [];
+let lastPortsSignature = "";
+let svgUpdateFrame = 0;
+const DATA_CACHE = {
+  vlans: null,
+};
+let aiPanelsLoaded = false;
+let aiLastRefreshAt = 0;
+
+const DEFAULT_PORTS = Array.from({length:48}, (_, idx) => ({
+  port: idx + 1,
+  name: `Port${idx + 1}`,
+  status: "down",
+  traffic_mbps: 0,
+  vlan_id: null,
+  vlan_name: null,
+}));
+
+/* ═══════════════════════════════════════════════════════════════════
+   TABS & LOADERS (تحميل كسول - lazy loading)
+═══════════════════════════════════════════════════════════════════ */
+const TAB_LOADERS = {
+  "panel-interfaces": () => {
+    if(ALL_IFACES.length) {
+      renderIfaces(ALL_IFACES);
+      updateMacPortSuggestions();
+      return;
+    }
+    loadIfaces();
+  },
+  "panel-errors": () => { if(!document.getElementById("err-body").innerHTML.includes("Analyzing")) loadErrors(); },
+  "panel-vlans": () => {
+    if(ALL_VLANS.length) {
+      renderVlans();
+      return;
+    }
+    loadVlans();
+  },
+  "panel-cdp": () => { if(!ALL_CDP.length) loadCdp(); },
+  "panel-poe": () => {
+    if(ALL_POE.length) {
+      renderPoe();
+      return;
+    }
+    loadPoe();
+  },
+  "panel-portsec": () => loadPortsec(),
+  "panel-mac": () => loadMac(),
+  "panel-ip": () => loadIpBrief(),
+  "panel-tdr": () => loadTdr(),
+  "panel-predictions": () => loadPredictions(),
+  "panel-health": () => loadHealthReport(),
+};
+let loadedTabs = new Set(["panel-sw"]);
+
+function switchTab(id, btnEl) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  if (btnEl && typeof btnEl === 'object') btnEl.classList.add("active");
+  else document.querySelector(`.tab[onclick*="${id}"]`)?.classList.add("active");
+  
+  if (!loadedTabs.has(id) && TAB_LOADERS[id]) {
+    loadedTabs.add(id);
+    setTimeout(TAB_LOADERS[id], 50); // تأخير بسيط لتجنب تجميد الواجهة
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SVG SWITCH VISUALIZATION (نسخة محسنة مع Cache)
+═══════════════════════════════════════════════════════════════════ */
+function buildSVGString(ports) {
+  const PW=11, PH=22, PG=2, GG=5, LW=66, R1=12, R2=R1+PH+4, SX=LW+4;
+  const colX=[];
+  let cx=SX;
+  for(let c=0;c<24;c++){
+    colX.push(cx);
+    cx+=PW+PG;
+    if((c+1)%4===0) cx+=GG;
+  }
+  let pSVG="";
+  for(let col=0;col<24;col++){
+    const px=colX[col];
+    [[col*2,R1],[col*2+1,R2]].forEach(([idx,y])=>{
+      const pd=ports[idx]||{status:"down",traffic_mbps:0,name:`Port${idx+1}`,vlan_id:null,vlan_name:null};
+      const stKey=STATUS2PC[pd.status]||"down";
+      const c=PC[stKey]||PC.down;
+      const vid=pd.vlan_id||"";
+      const vnm=(pd.vlan_name||"").replace(/"/g,"");
+      const pnm=(pd.name||`Port${idx+1}`).replace(/"/g,"");
+      pSVG+=`
+        <g class="port-g" data-port="${idx+1}" data-status="${stKey}"
+           data-mbps="${pd.traffic_mbps}" data-name="${pnm}"
+           data-vid="${vid}" data-vnm="${vnm}">
+          <rect x="${px}" y="${y}" width="${PW}" height="${PH}" rx="2"
+                fill="${c.body}" stroke="${c.border}" stroke-width=".5"/>
+          <rect x="${px+2}" y="${y+4}" width="${PW-4}" height="${PH-10}" rx="1"
+                fill="#030912" stroke="${c.border}" stroke-width=".3"/>
+          <circle class="${c.cls}" cx="${px+PW/2}" cy="${y+PH-3}"
+                  r="1.8" fill="${c.led}" opacity=".95"/>
+        </g>`;
+    });
+  }
+  let nSVG="";
+  for(let c=0;c<24;c+=4){
+    nSVG+=`<text x="${colX[c]}" y="${R1-2}" font-size="4" fill="#1e4a6a">${c*2+1}</text>
+           <text x="${colX[c]}" y="${R2+PH+6}" font-size="4" fill="#1e4a6a">${c*2+2}</text>`;
+  }
+  const sfpX=cx+4;
+  let sfpSVG="";
+  [[0,R1,"#00c040"],[1,R1,"#00c040"],[0,R2,"#132030"],[1,R2,"#132030"]].forEach(([si,sy,lc])=>{
+    sfpSVG+=`<rect x="${sfpX+si*16}" y="${sy}" width="14" height="${PH}" rx="2"
+              fill="#060f18" stroke="#1a3a5a" stroke-width=".5"/>
+             <circle cx="${sfpX+si*16+7}" cy="${sy+PH-3}" r="1.5" fill="${lc}" opacity=".85"/>`;
+  });
+  const upC=ports.filter(p=>["up","wrn"].includes(STATUS2PC[p.status]||p.status)).length;
+  const errC=ports.filter(p=>(STATUS2PC[p.status]||p.status)==="err").length;
+  const sysCol=errC>0?"#ff3860":upC>0?"#00e676":"#333";
+  const TW=sfpX+2*16+10;
+  return `
+    <rect x="0" y="0" width="${TW}" height="78" rx="4" fill="#091828" stroke="#18303f" stroke-width="1"/>
+    <rect x="1" y="1" width="${TW-2}" height="76" rx="3.5" fill="none" stroke="#050e18" stroke-width=".5"/>
+    <rect x="4" y="8" width="6" height="6" rx="1" fill="${sysCol}" opacity=".9"/>
+    <text x="4" y="19" font-size="3.5" fill="#2a5a7a">SYS</text>
+    <rect x="4" y="24" width="6" height="6" rx="1" fill="#151515"/>
+    <text x="4" y="35" font-size="3.5" fill="#2a5a7a">RPS</text>
+    <rect x="4" y="40" width="6" height="6" rx="1" fill="#00d4ff" opacity=".7"/>
+    <text x="4" y="51" font-size="3.5" fill="#2a5a7a">STAT</text>
+    <text x="28" y="23" text-anchor="middle" font-size="6.5" fill="#e8f8ff" font-weight="bold">CISCO</text>
+    <text x="28" y="31" text-anchor="middle" font-size="4" fill="#3a7a9a">Catalyst</text>
+    ${pSVG}${sfpSVG}${nSVG}`;
+}
+
+function normalizePortData(port, idx) {
+  const pd = port || {};
+  return {
+    port: idx + 1,
+    name: pd.name || `Port${idx + 1}`,
+    status: pd.status || "down",
+    traffic_mbps: Number(pd.traffic_mbps) || 0,
+    vlan_id: pd.vlan_id ?? null,
+    vlan_name: pd.vlan_name || null,
+  };
+}
+
+function getPortsSignature(ports) {
+  return Array.from({length:48}, (_, idx) => {
+    const pd = normalizePortData(ports[idx], idx);
+    return [
+      pd.status,
+      pd.traffic_mbps,
+      pd.name,
+      pd.vlan_id || "",
+      pd.vlan_name || "",
+    ].join("~");
+  }).join("|");
+}
+
+function initializeSwitchSVG() {
+  if (svgPortNodes.length) return;
+  const svg = document.getElementById("sw-svg");
+  svg.innerHTML = buildSVGString(DEFAULT_PORTS);
+  bindTooltips(svg);
+  svgPortNodes = Array.from(svg.querySelectorAll(".port-g")).map(group => ({
+    group,
+    outerRect: group.children[0],
+    innerRect: group.children[1],
+    led: group.children[2],
+  }));
+}
+
+function updatePortNode(node, port, idx) {
+  const pd = normalizePortData(port, idx);
+  const stKey = STATUS2PC[pd.status] || pd.status || "down";
+  const c = PC[stKey] || PC.down;
+  const sig = [
+    stKey,
+    pd.traffic_mbps,
+    pd.name,
+    pd.vlan_id || "",
+    pd.vlan_name || "",
+  ].join("~");
+
+  if (node.group.dataset.sig === sig) return;
+
+  node.group.dataset.sig = sig;
+  node.group.dataset.status = stKey;
+  node.group.dataset.mbps = String(pd.traffic_mbps);
+  node.group.dataset.name = pd.name;
+  node.group.dataset.vid = pd.vlan_id ?? "";
+  node.group.dataset.vnm = pd.vlan_name || "";
+
+  node.outerRect.setAttribute("fill", c.body);
+  node.outerRect.setAttribute("stroke", c.border);
+  node.innerRect.setAttribute("stroke", c.border);
+  node.led.setAttribute("fill", c.led);
+  node.led.setAttribute("class", c.cls);
+}
+
+function updateSVG(ports = ALL_PORTS) {
+  initializeSwitchSVG();
+  const signature = getPortsSignature(ports);
+  if (signature === lastPortsSignature) return;
+  lastPortsSignature = signature;
+  svgPortNodes.forEach((node, idx) => updatePortNode(node, ports[idx], idx));
+}
+
+function scheduleSVGUpdate(ports = ALL_PORTS) {
+  ALL_PORTS = ports;
+  if (svgUpdateFrame) return;
+  svgUpdateFrame = requestAnimationFrame(() => {
+    svgUpdateFrame = 0;
+    updateSVG(ALL_PORTS);
+  });
+}
+
+function buildSVG() {
+  scheduleSVGUpdate();
+}
+
+function bindTooltips(svg){
+  if (svg.dataset.tooltipBound === "1") return;
+  const tt=document.getElementById("tt");
+  svg.querySelectorAll(".port-g").forEach(g=>{
+    g.addEventListener("mouseenter",()=>{
+      const num=g.dataset.port,name=g.dataset.name||`Port${num}`;
+      const st=g.dataset.status||"down",mbps=parseInt(g.dataset.mbps)||0;
+      const vid=g.dataset.vid,vnm=g.dataset.vnm;
+      const info=PC[st]||PC.down;
+      const stCol={up:"#00c853",down:"#2a5060",disabled:"#333",err:"#ff3860",wrn:"#ffb800"}[st]||"#2a5060";
+      let vlanHtml = (vid && vid!=='null' && vid!=='undefined' && vid!=='')
+        ? `<div>VLAN : <span style="color:#00ff9d">VLAN ${escapeHtml(String(vid))} — ${escapeHtml(vnm || 'Untagged')}</span></div>`
+        : `<div style="color:#1e4060">No VLAN assigned</div>`;
+      tt.innerHTML=`
+        <div style="color:#00d4ff;font-weight:bold;margin-bottom:5px;font-size:13px">Port ${escapeHtml(String(num))}</div>
+        <div style="color:#2a6080;font-size:11px;margin-bottom:4px">${escapeHtml(name)}</div>
+        <div>Status : <span style="color:${stCol}">${info.lbl}</span></div>
+        ${mbps>0?`<div>Traffic : <span style="color:#00d4ff">${mbps} Mbps</span></div>`:""}
+        ${vlanHtml}`;
+      tt.style.display="block";
+    });
+    g.addEventListener("mousemove",e=>{tt.style.left=(e.clientX+16)+"px";tt.style.top=(e.clientY-14)+"px";});
+    g.addEventListener("mouseleave",()=>{tt.style.display="none";});
+  });
+  svg.dataset.tooltipBound = "1";
+}
+
+function updateInterfaceSummaryStats(list) {
+  const connCnt = list.filter(i=>i.status==="connected").length;
+  const errCnt = list.filter(i=>i.has_errors).length;
+  document.getElementById("sc-up").textContent = connCnt + " / " + list.length;
+  document.getElementById("sc-up-sub").textContent = "physical ports";
+  document.getElementById("sc-err").textContent = errCnt;
+  const badge = document.getElementById("tab-err-badge");
+  badge.textContent = errCnt;
+  badge.style.display = errCnt>0 ? "inline" : "none";
+}
+
+function updatePoeSummaryStats(poeData) {
+  document.getElementById("sc-poe").textContent = `${poeData.consumed_w||0}W`;
+  document.getElementById("sc-poe-sub").textContent = `of ${poeData.total_w||0}W budget`;
+}
+
+function aiSeverityColor(level) {
+  return level === "critical" ? "#ff3860"
+    : level === "warning" ? "#ffb800"
+    : level === "info" ? "#00d4ff"
+    : "#00ff9d";
+}
+
+function aiSeverityPill(level) {
+  return level === "critical" ? "pill-err"
+    : level === "warning" ? "pill-wrn"
+    : level === "info" ? "pill-info"
+    : "pill-up";
+}
+
+function renderAiLiveStatus(mode, text) {
+  const el = document.getElementById("ai-live-status");
+  if (!el) return;
+  el.className = `pill ${mode === "live" ? "pill-up" : mode === "retry" ? "pill-wrn" : "pill-info"}`;
+  el.textContent = text;
+}
+
+function renderAiDiagnosisCard(data, sourceMode="api") {
+  const rootEl = document.getElementById("ai-root");
+  const issuesEl = document.getElementById("ai-iss");
+  const recEl = document.getElementById("ai-recommend");
+  const severity = data?.severity || "good";
+  const rootCause = data?.root_cause || "لا توجد مؤشرات قوية على عطل فعلي حالياً";
+  const issues = data?.issues || [];
+  const recommendations = data?.recommendations || [];
+
+  rootEl.style.color = aiSeverityColor(severity);
+  rootEl.textContent = rootCause;
+  issuesEl.innerHTML = issues.length
+    ? issues.map(issue => {
+        const issueSeverity = issue.severity || issue.type || "info";
+        return `<div><span class="pill ${aiSeverityPill(issueSeverity)}">${escapeHtml(issue.type || issueSeverity)}</span> <span style="margin-left:6px">${escapeHtml(issue.msg || "")}</span></div>`;
+      }).join("")
+    : `<div style="color:var(--green)">✅ لا توجد مؤشرات أعطال حرجة حالياً</div>`;
+  recEl.innerHTML = recommendations.length
+    ? recommendations.map(item => `💡 ${escapeHtml(item)}`).join("<br>")
+    : `💡 استمر في المراقبة الدورية ولا توجد خطوات عاجلة مطلوبة`;
+
+  renderAiLiveStatus(
+    sourceMode,
+    sourceMode === "live" ? "LIVE UPDATES" : sourceMode === "retry" ? "RECONNECTING" : "API FALLBACK"
+  );
+}
+
+function renderNetworkIssuesCard(items=[]) {
+  const issuesCard = document.getElementById("issues-card");
+  if (!items.length) {
+    issuesCard.innerHTML = `<div style="color:var(--green)">✅ No duplex or loop issues detected</div>`;
+    return;
+  }
+  issuesCard.innerHTML = items.map(item => `
+    <div class="pred-card" style="border-left:3px solid ${aiSeverityColor(item.severity)}">
+      <div class="pred-title">${escapeHtml(item.title || "Issue")}</div>
+      <div class="pred-value">${escapeHtml(item.message || "—")}</div>
+      <div class="pred-action">🔧 ${escapeHtml(item.action || "راقب الحالة")}</div>
+    </div>
+  `).join("");
+}
+
+function renderPredictionSummaryCard(items=[]) {
+  const predCard = document.getElementById("pred-summary-card");
+  if (!items.length) {
+    predCard.innerHTML = `<div style="color:var(--txt3);font-size:12px">No prediction data available</div>`;
+    return;
+  }
+  predCard.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+      ${items.map(item => `
+        <div class="pred-card" style="margin-bottom:0">
+          <div class="pred-title">${escapeHtml(item.title || "Prediction")}</div>
+          <div class="pred-value" style="color:${aiSeverityColor(item.severity)}">${escapeHtml(item.message || "—")}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function loadAiDiagnosis(force=false) {
+  if (!force && aiPanelsLoaded && (Date.now() - aiLastRefreshAt) < 15000) return;
+  try {
+    const r = await fetch(API("ai-diagnosis"));
+    const d = await r.json();
+    renderAiDiagnosisCard(d, "api");
+    renderNetworkIssuesCard(d.network_issues || []);
+    renderPredictionSummaryCard(d.prediction_items || []);
+    aiPanelsLoaded = true;
+    aiLastRefreshAt = Date.now();
+  } catch (e) {
+    document.getElementById("ai-root").style.color = "#ffb800";
+    document.getElementById("ai-root").textContent = "تعذر تحديث التشخيص حالياً";
+    document.getElementById("ai-iss").innerHTML = `<div style="color:var(--amber)">سيستمر عرض آخر بيانات متاحة بمجرد نجاح الاتصال أو الـ API.</div>`;
+    renderAiLiveStatus("api", "API FALLBACK");
+  }
+}
+
+function updateMacPortSuggestions() {
+  const list = document.getElementById("mac-port-list");
+  if (!list) return;
+
+  const names = [...new Set((ALL_IFACES || []).map(i => i.name).filter(Boolean))];
+  list.innerHTML = names.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
+}
+
+function buildPortsFromApiState() {
+  if (!ALL_IFACES.length) return DEFAULT_PORTS;
+
+  const vlanMap = {};
+  ALL_VLANS.forEach(v => {
+    (v.port_names || []).forEach(portName => {
+      if (!(portName in vlanMap)) {
+        vlanMap[portName] = {
+          id: v.vlan_id,
+          name: v.name,
+        };
+      }
+    });
+  });
+
+  const poeFaults = new Set(
+    (ALL_POE || [])
+      .filter(p => p.faulty || ["fault", "deny"].includes(p.status))
+      .map(p => String(p.port))
+  );
+
+  return Array.from({length:48}, (_, idx) => {
+    const ifc = ALL_IFACES[idx];
+    if (!ifc) return DEFAULT_PORTS[idx];
+
+    const name = ifc.name || `Port${idx + 1}`;
+    const mbps = Number(ifc.traffic_mbps) || 0;
+    let status = "down";
+
+    if (ifc.status === "disabled") {
+      status = "disabled";
+    } else if (poeFaults.has(name)) {
+      status = "err";
+    } else if (ifc.status === "connected") {
+      status = mbps > 800 ? "err" : mbps > 300 ? "wrn" : "up";
+    }
+
+    const vlanInfo = vlanMap[name] || {};
+    return {
+      port: idx + 1,
+      name,
+      status,
+      traffic_mbps: mbps,
+      vlan_id: vlanInfo.id || null,
+      vlan_name: vlanInfo.name || null,
+    };
+  });
+}
+
+function syncSwitchPanelFromApiState() {
+  if (!ALL_IFACES.length) return;
+  scheduleSVGUpdate(buildPortsFromApiState());
+}
+
+async function bootstrapSwitchPanel() {
+  initializeSwitchSVG();
+  try {
+    const [ifaceRes, vlanRes, poeRes] = await Promise.allSettled([
+      fetch(API("interfaces")).then(r => r.json()),
+      fetch(API("vlans")).then(r => r.json()),
+      fetch(API("poe")).then(r => r.json()),
+    ]);
+
+    if (ifaceRes.status === "fulfilled") {
+      ALL_IFACES = ifaceRes.value.interfaces || [];
+      if (ALL_IFACES.length) {
+        updateInterfaceSummaryStats(ALL_IFACES);
+        updateMacPortSuggestions();
+      }
+    }
+
+    if (vlanRes.status === "fulfilled") {
+      ALL_VLANS = vlanRes.value.vlans || [];
+    }
+
+    if (poeRes.status === "fulfilled") {
+      ALL_POE = poeRes.value.ports || [];
+      updatePoeSummaryStats(poeRes.value);
+    }
+
+    syncSwitchPanelFromApiState();
+  } catch (e) {
+    console.error("bootstrapSwitchPanel", e);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SYSTEM INFO
+═══════════════════════════════════════════════════════════════════ */
+async function loadSystem(){
+  try{
+    const r=await fetch(API("system"));
+    const d=await r.json();
+    document.getElementById("h-model").textContent = d.model||"—";
+    document.getElementById("h-ios").textContent = "IOS "+d.ios;
+    document.getElementById("h-uptime").textContent = d.uptime||"—";
+    document.getElementById("h-loc").textContent = d.location||"—";
+    document.getElementById("h-serial").textContent = d.serial||"—";
+    const cpuCol = d.cpu_5s>=90?"#ff3860":d.cpu_5s>=70?"#ffb800":"#00ff9d";
+    document.getElementById("sc-cpu").style.color = cpuCol;
+    document.getElementById("sc-cpu").textContent = `${d.cpu_5s||0}%`;
+    document.getElementById("sc-cpu-sub").textContent = `1m: ${d.cpu_1m||0}%  5m: ${d.cpu_5m||0}%`;
+    const memCol = d.mem_pct>=85?"#ff3860":d.mem_pct>=60?"#ffb800":"#00d4ff";
+    document.getElementById("sc-mem").style.color = memCol;
+    document.getElementById("sc-mem").textContent = `${d.mem_pct||0}%`;
+    document.getElementById("sc-mem-sub").textContent = `Free: ${Math.round((d.mem_free||0)/1024)}K`;
+  }catch(e){console.error("system",e);}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INTERFACES
+═══════════════════════════════════════════════════════════════════ */
+async function loadIfaces(){
+  const tbody=document.getElementById("iface-body");
+  tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...</td></tr>`;
+  try{
+    const qs = ifaceFilter!=="all" ? `status=${ifaceFilter}` : "";
+    const r = await fetch(API("interfaces", qs));
+    const d = await r.json();
+    ALL_IFACES = d.interfaces || [];
+    if(ALL_IFACES.length === 0){
+      tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--amber)">⚠️ No interface data received. Check SNMP connectivity.</td></tr>`;
+      return;
+    }
+    renderIfaces(ALL_IFACES);
+    updateInterfaceSummaryStats(ALL_IFACES);
+    updateMacPortSuggestions();
+    syncSwitchPanelFromApiState();
+  }catch(e){
+    console.error("loadIfaces error:", e);
+    tbody.innerHTML=`<tr><td colspan="12" style="color:#ff3860;padding:14px">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderIfaces(list){
+  const search = (document.getElementById("iface-search").value||"").toLowerCase();
+  const filtered = list.filter(i=>!search || i.name.toLowerCase().includes(search) || (i.alias||"").toLowerCase().includes(search));
+  const tbody=document.getElementById("iface-body");
+  if(!filtered.length){
+    tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;padding:16px;color:var(--txt3)">No ports match</td></tr>`;
+    return;
+  }
+  const pillMap={"connected":"pill-up","notconnect":"pill-dn","disabled":"pill-dis"};
+  tbody.innerHTML = filtered.map(i=>{
+    const speedStr = i.speed_str || (i.speed_bps ? fmtSpeedFromBps(i.speed_bps) : "—");
+    return `
+    <tr>
+      <td style="color:#00d4ff;font-weight:bold">${i.name || "?"}<\/td>
+      <td style="color:var(--txt2);font-size:11px">${i.alias || "—"}<\/td>
+      <td><span class="pill ${pillMap[i.status]||"pill-dn"}">${i.status || "unknown"}</span><\/td>
+      <td style="color:var(--txt2)">${speedStr}<\/td>
+      <td style="color:var(--txt2)">${fmtBytes(i.in_octets)}<\/td>
+      <td style="color:var(--txt2)">${fmtBytes(i.out_octets)}<\/td>
+      <td>${i.traffic_mbps>0?`<span style="color:${i.traffic_mbps>800?"#ff3860":i.traffic_mbps>300?"#ffb800":"#00d4ff"}">${i.traffic_mbps} Mbps</span>`:"—"}<\/td>
+      <td style="color:${i.in_errors>100?"#ff3860":i.in_errors>0?"#ffb800":"var(--txt3)"}">${i.in_errors||0}<\/td>
+      <td style="color:${i.out_errors>50?"#ff3860":i.out_errors>0?"#ffb800":"var(--txt3)"}">${i.out_errors||0}<\/td>
+      <td style="color:${i.in_discards>50?"#ff3860":i.in_discards>0?"#ffb800":"var(--txt3)"}">${i.in_discards||0}<\/td>
+      <td style="color:${i.out_discards>50?"#ff3860":i.out_discards>0?"#ffb800":"var(--txt3)"}">${i.out_discards||0}<\/td>
+      <td style="color:var(--txt3)">${i.mtu||1500}<\/td>
+    </td>`;
+  }).join("");
+}
+
+function fmtSpeedFromBps(bps){
+  if(!bps || bps===0) return "—";
+  if(bps >= 1_000_000_000) return (bps/1_000_000_000).toFixed(0) + "G";
+  if(bps >= 1_000_000) return (bps/1_000_000).toFixed(0) + "M";
+  if(bps >= 1_000) return (bps/1_000).toFixed(0) + "K";
+  return bps + "bps";
+}
+
+function filterIface(){ renderIfaces(ALL_IFACES); }
+function setIfaceFilter(f,btn){
+  ifaceFilter=f;
+  document.querySelectorAll("#panel-interfaces .filter-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  loadIfaces();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ERRORS
+═══════════════════════════════════════════════════════════════════ */
+async function loadErrors(){
+  const tbody=document.getElementById("err-body");
+  const sumEl=document.getElementById("err-summary");
+  tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Analyzing...</td></tr>`;
+  try{
+    const r=await fetch(API("errors"));
+    const d=await r.json();
+    const errors=d.errors||[];
+    const crit=errors.filter(e=>e.severity==="critical").length;
+    const warn=errors.filter(e=>e.severity==="warning").length;
+    sumEl.innerHTML = errors.length===0
+      ? `<span style="color:var(--green)">✔ No interface errors detected.</span>`
+      : `<span style="color:var(--red)">Critical: ${crit}</span> · <span style="color:var(--amber)">Warning: ${warn}</span> · Total ports with errors: ${errors.length}`;
+    if(!errors.length){
+      tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--green)">✔ All clean</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = errors.map(e=>`
+      <tr>
+        <td style="color:#00d4ff;font-weight:bold">${e.name}<\/td>
+        <td style="color:${e.in_errors>100?"#ff3860":e.in_errors>0?"#ffb800":"var(--txt3)"}">${e.in_errors}<\/td>
+        <td style="color:${e.out_errors>50?"#ff3860":e.out_errors>0?"#ffb800":"var(--txt3)"}">${e.out_errors}<\/td>
+        <td style="color:${e.in_discards>50?"#ff3860":e.in_discards>0?"#ffb800":"var(--txt3)"}">${e.in_discards}<\/td>
+        <td style="color:${e.out_discards>50?"#ff3860":e.out_discards>0?"#ffb800":"var(--txt3)"}">${e.out_discards}<\/td>
+        <td><span class="pill pill-${e.severity==="critical"?"err":e.severity==="warning"?"wrn":"up"}">${e.severity}</span><\/td>
+        <td style="color:var(--txt2);font-size:11px;white-space:normal">${e.causes.join("<br>")||"—"}<\/td>
+        <td style="color:var(--green);font-size:11px;white-space:normal">${e.fixes.join("<br>")||"—"}<\/td>
+      </tr>`).join("");
+  }catch(ex){tbody.innerHTML=`<tr><td colspan="8" style="color:#ff3860;padding:14px">Error: ${ex.message}</td></tr>`;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VLANS
+═══════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════
+   VLANS
+═══════════════════════════════════════════════════════════════════ */
+async function loadVlans(force=false){
+  if(DATA_CACHE.vlans && !force) {
+    ALL_VLANS = DATA_CACHE.vlans;
+    renderVlans();
+    syncSwitchPanelFromApiState();
+    return;
+  }
+  const tbody=document.getElementById("vlan-body");
+  tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...</td></tr>`;
+  try{
+    const r=await fetch(`/api/switch/${HOSTNAME}/vlans/`);
+    const d=await r.json();
+    ALL_VLANS = d.vlans || [];
+    DATA_CACHE.vlans = ALL_VLANS;
+    
+    if(!ALL_VLANS.length){
+      tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--txt3)">No VLANs with port assignments - قد لا يدعم السويتش VTP MIB</td></tr>`;
+      syncSwitchPanelFromApiState();
+      return;
+    }
+    renderVlans();
+    syncSwitchPanelFromApiState();
+  }catch(e){
+    console.error("VLAN error:", e);
+    tbody.innerHTML=`<tr><td colspan="5" style="color:#ff3860;padding:14px">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderVlans(){
+  const tbody = document.getElementById("vlan-body");
+  const active = ALL_VLANS.filter(v => v.port_count > 0);
+  if(!active.length){
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--txt3)">No VLANs with port assignments</td></tr>`;
+    return;
+  }
+  const name2status = {};
+  ALL_PORTS.forEach(p => { name2status[p.name] = p.status; });
+  tbody.innerHTML = active.map(v => {
+    const upCnt = v.port_names.filter(p => {
+      const s = name2status[p];
+      return s === "connected" || s === "up" || s === "wrn";
+    }).length;
+    const pct = v.port_count > 0 ? Math.round(upCnt / v.port_count * 100) : 0;
+    const bc = pct >= 80 ? "#00c853" : pct >= 40 ? "#ffb800" : "#ff3860";
+    const allPorts = v.port_names.join(", ");
+    const portCount = v.port_names.length;
+    const showExpand = portCount > 10;
+    const previewPorts = v.port_names.slice(0, 8).join(", ");
+    const remainingCount = portCount - 8;
+    return `
+      <tr id="vlan-row-${v.vlan_id}">
+        <td style="color:#00d4ff;font-weight:bold;vertical-align:top">${v.vlan_id}</td>
+        <td style="color:#00ff9d;vertical-align:top">${escapeHtml(v.name)}</td>
+        <td style="vertical-align:top">${v.active ? `<span class="pill pill-up">active</span>` : `<span class="pill pill-dn">inactive</span>`}</td>
+        <td style="color:#8ab8d8;font-size:11px;max-width:400px;word-break:break-all;white-space:normal;vertical-align:top">
+          <span class="port-preview-${v.vlan_id}">${escapeHtml(previewPorts)}${remainingCount > 0 ? ` <span style="color:var(--amber);font-size:10px">(+${remainingCount} more)</span>` : ""}</span>
+          <span class="port-full-${v.vlan_id}" style="display:none">${escapeHtml(allPorts)}</span>
+          ${showExpand ? `<button class="toggle-ports-btn" data-vlan="${v.vlan_id}" style="background:transparent;border:1px solid var(--border);color:var(--cyan);font-size:10px;border-radius:3px;padding:2px 6px;margin-top:4px;cursor:pointer">📋 Show All (${portCount})</button>` : ""}
+        </td>
+        <td style="vertical-align:top">
+          <span style="color:${bc};font-size:11px">${upCnt}/${portCount}</span>
+          <div class="pb-bg" style="margin-top:3px"><div class="pb-fg" style="width:${pct}%;background:${bc}"></div></div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+  
+  document.querySelectorAll('.toggle-ports-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const vlanId = this.dataset.vlan;
+      const previewSpan = document.querySelector(`.port-preview-${vlanId}`);
+      const fullSpan = document.querySelector(`.port-full-${vlanId}`);
+      if (fullSpan.style.display === 'none') {
+        previewSpan.style.display = 'none';
+        fullSpan.style.display = 'inline';
+        this.textContent = `📋 Show Less`;
+      } else {
+        previewSpan.style.display = 'inline';
+        fullSpan.style.display = 'none';
+        this.textContent = `📋 Show All (${fullSpan.textContent.split(',').length})`;
+      }
+    });
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CDP
+═══════════════════════════════════════════════════════════════════ */
+async function loadCdp(){
+  const tbody=document.getElementById("cdp-body");
+  tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...</td></tr>`;
+  try{
+    const r=await fetch(API("cdp"));
+    const d=await r.json();
+    ALL_CDP=d.neighbors||[];
+    document.getElementById("sc-cdp").textContent=ALL_CDP.length;
+    if(!ALL_CDP.length){tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--txt3)">No CDP neighbors found</td></tr>`;return;}
+    tbody.innerHTML=ALL_CDP.map(n=>`
+      <tr><td style="color:#00d4ff">${n.local_port}<\/td><td style="color:#00ff9d">${n.device_id}<\/td>
+      <td style="color:#a0c8e8">${n.ip||"—"}<\/td><td style="color:var(--txt2);font-size:11px">${n.platform||"—"}<\/td>
+      <td style="color:var(--txt2)">${n.remote_port||"—"}<\/td><\/tr>`).join("");
+  }catch(e){tbody.innerHTML=`<tr><td colspan="5" style="color:#ff3860;padding:14px">Error: ${e.message}</td></tr>`;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PoE
+═══════════════════════════════════════════════════════════════════ */
+async function loadPoe(){
+  const tbody=document.getElementById("poe-body");
+  tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...</td></tr>`;
+  try{
+    const r=await fetch(API("poe"));
+    const d=await r.json();
+    ALL_POE=d.ports||[];
+    document.getElementById("poe-total").textContent = d.total_w||"—";
+    document.getElementById("poe-used").textContent = d.consumed_w||"—";
+    document.getElementById("poe-avail").textContent = d.available_w||"—";
+    document.getElementById("poe-fault").textContent = (d.faulty||[]).length;
+    updatePoeSummaryStats(d);
+    renderPoe();
+    syncSwitchPanelFromApiState();
+  }catch(e){tbody.innerHTML=`<tr><td colspan="4" style="color:#ff3860;padding:14px">Error: ${e.message}</td></tr>`;}
+}
+
+function renderPoe(){
+  const filtered=poeFilter==="all"?ALL_POE:ALL_POE.filter(p=>poeFilter==="fault"?p.faulty:p.status===poeFilter);
+  const tbody=document.getElementById("poe-body");
+  if(!filtered.length){tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--txt3)">No ports match</td></tr>`;return;}
+  const stMap={on:"pill-up",off:"pill-dn",fault:"pill-err",deny:"pill-err",searching:"pill-wrn",unknown:"pill-dn"};
+  tbody.innerHTML=filtered.map(p=>`
+    <tr><td style="color:#00d4ff">${p.port}<\/td>
+    <td><span class="pill ${stMap[p.status]||"pill-dn"}">${p.status}</span><\/td>
+    <td style="color:${p.power_w>15?"#ff3860":p.power_w>0?"#ffb800":"var(--txt3)"}">${p.power_w||"—"}<\/td>
+    <td style="color:var(--txt2);font-size:11px">${p.class||"—"}<\/td><\/tr>`).join("");
+}
+function setPoeFilter(f,btn){poeFilter=f;document.querySelectorAll("#panel-poe .filter-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");renderPoe();}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PORT SECURITY
+═══════════════════════════════════════════════════════════════════ */
+async function loadPortsec(){
+  const tbody=document.getElementById("psec-body");
+  const sum=document.getElementById("psec-summary");
+  tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...</td></tr>`;
+  try{
+    const r=await fetch(API("portsec"));
+    const d=await r.json();
+    if(!d.enabled){
+      sum.innerHTML=`<span style="color:var(--txt3)">ℹ Port-security is not configured on this switch.</span>`;
+      tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--txt3)">Not configured<\/td><\/tr>`;
+      return;
+    }
+    sum.innerHTML=`<span style="color:var(--green)">Port-security enabled on ${d.enabled_count} port(s)</span>`;
+    const enabledPorts=(d.ports||[]).filter(p=>p.status==="enabled");
+    if(!enabledPorts.length){tbody.innerHTML=`<td><td colspan="5" style="text-align:center;padding:16px;color:var(--txt3)">No enabled ports<\/td><\/tr>`;return;}
+    tbody.innerHTML=enabledPorts.map(p=>`
+      <tr><td style="color:#00d4ff">${p.port}<\/td><td><span class="pill pill-up">enabled</span><\/td>
+      <td style="color:var(--txt2)">${p.max_mac}<\/td>
+      <td style="color:${p.current_mac>=p.max_mac?"#ff3860":"var(--txt2)"}">${p.current_mac}<\/td>
+      <td style="color:var(--amber)">${p.violation}<\/td><\/tr>`).join("");
+  }catch(e){tbody.innerHTML=`<td><td colspan="5" style="color:#ff3860;padding:14px">Error: ${e.message}<\/td><\/tr>`;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MAC TABLE
+═══════════════════════════════════════════════════════════════════ */
+async function loadMac(){
+  const tbody=document.getElementById("mac-body");
+  tbody.innerHTML=`<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...<\/td><\/tr>`;
+  const port=document.getElementById("mac-port-filter").value.trim();
+  try{
+    const params = new URLSearchParams({all:"1"});
+    if (port) params.set("port", port);
+    const qs=params.toString();
+    const r=await fetch(API("mac",qs));
+    const d=await r.json();
+    const macs=d.mac_table||[];
+    const shownTotal = d.filtered_total ?? macs.length;
+    document.getElementById("mac-count").textContent=`${shownTotal} entries (of ${d.total||0})`;
+    if(!macs.length){
+      tbody.innerHTML=`<tr><td colspan="3" style="text-align:center;padding:16px;color:var(--txt3)">${port ? `No MAC entries found on ${escapeHtml(port)}` : "No MAC entries found"}</td></tr>`;
+      return;
+    }
+    const typeCol={learned:"var(--txt)",self:"#00d4ff",mgmt:"#00ff9d",other:"var(--txt3)"};
+    tbody.innerHTML=macs.map(m=>`
+      <tr><td style="font-family:monospace">${m.mac}<\/td><td style="color:#00d4ff">${m.port}<\/td>
+      <td style="color:${typeCol[m.type]||"var(--txt2)"};font-size:11px">${m.type}<\/td><\/tr>`).join("");
+  }catch(e){tbody.innerHTML=`<tr><td colspan="3" style="color:#ff3860;padding:14px">Error: ${e.message}</td></tr>`;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   IP BRIEF
+═══════════════════════════════════════════════════════════════════ */
+async function loadIpBrief(){
+  const tbody=document.getElementById("ip-body");
+  tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...<\/td><\/tr>`;
+  try{
+    const r=await fetch(API("ipbrief"));
+    const d=await r.json();
+    const ifaces=d.ip_interfaces||[];
+    if(!ifaces.length){tbody.innerHTML=`<td><td colspan="4" style="text-align:center;padding:16px;color:var(--txt3)">No IP interfaces found<\/td><\/tr>`;return;}
+    tbody.innerHTML=ifaces.map(i=>`
+      <tr><td style="color:#00d4ff">${i.name}<\/td><td style="color:#00ff9d;font-family:monospace">${i.ip}<\/td>
+      <td style="color:var(--txt2);font-family:monospace">${i.mask}<\/td>
+      <td><span class="pill ${i.status==="up"?"pill-up":"pill-dn"}">${i.status}</span><\/td><\/tr>`).join("");
+  }catch(e){tbody.innerHTML=`<tr><td colspan="4" style="color:#ff3860;padding:14px">Error: ${e.message}<\/td><\/tr>`;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TDR
+═══════════════════════════════════════════════════════════════════ */
+async function loadTdr(){
+  const tbody=document.getElementById("tdr-body");
+  tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--txt3)"><span class="spin">⟳</span> Loading...<\/td><\/tr>`;
+  try{
+    const r=await fetch(API("tdr"));
+    const d=await r.json();
+    const tdr=d.tdr||[];
+    const sel = document.getElementById("tdr-port-sel");
+    if(sel && sel.options.length <= 1 && ALL_IFACES.length){
+      sel.innerHTML = '<option value="">— Select port —</option>';
+      ALL_IFACES.forEach(i=>{const opt=document.createElement("option");opt.value=i.name;opt.textContent=i.name;sel.appendChild(opt);});
+    }
+    if(!tdr.length){
+      tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--txt3)">ℹ️ No TDR data available — run 'test cable-diagnostics tdr' first on the switch<\/td><\/tr>`;
+      return;
+    }
+    const stCol = {"ok":"#00c853","open":"#ff3860","short":"#ff3860","broken":"#ff3860","unknown":"var(--txt3)","impedanceMismatch":"#ffb800"};
+    const diag = {"ok":"✅ Cable OK","open":"⚠️ Cable open — استبدل الكابل","short":"⚠️ Cable short — تحقق من التوصيل","broken":"⚠️ Cable broken — استبدل فوراً","unknown":"❓ Unknown — أعد الاختبار","impedanceMismatch":"⚠️ Impedance mismatch — تحقق من نوع الكابل"};
+    tbody.innerHTML = tdr.map(t=>`
+      <tr><td style="color:#00d4ff">${t.port || "?"}<\/td>
+      <td style="color:${stCol[t.status] || "var(--txt2)"}">${t.status || "unknown"}<\/td>
+      <td style="color:var(--txt2)">${t.length_m >= 0 ? t.length_m + " m" : "—"}<\/td>
+      <td style="color:${t.healthy ? "var(--green)" : "var(--amber)"};font-size:11px">${diag[t.status] || t.status}<\/td><\/tr>`).join("");
+  }catch(e){tbody.innerHTML=`<td><td colspan="4" style="color:#ff3860;padding:14px">Error: ${e.message}<\/td><\/tr>`;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PREDICTIONS (توقع الأعطال)
+═══════════════════════════════════════════════════════════════════ */
+async function loadPredictions(){
+  const cableDiv=document.getElementById("cable-pred-card");
+  const cpuDiv=document.getElementById("cpu-pred-card");
+  const stormDiv=document.getElementById("storm-pred-card");
+  const overloadDiv=document.getElementById("overload-pred-card");
+  const cableTableBody=document.getElementById("cable-estimate-body");
+  const riskScoreSpan=document.getElementById("risk-score");
+  const riskLevelSpan=document.getElementById("risk-level");
+  
+  cableDiv.innerHTML=`<div style="color:var(--txt3);font-size:12px"><span class="spin">⟳</span> Loading...</div>`;
+  try{
+    const r=await fetch(API("predictions"));
+    const d=await r.json();
+    const pred=d.predictions||{};
+    const estimates=d.cable_estimates||[];
+    
+    const riskScore=d.risk_score||0;
+    const riskLevel=d.risk_level||"good";
+    riskScoreSpan.textContent=`${riskScore}%`;
+    riskScoreSpan.style.color=riskLevel==="critical"?"#ff3860":riskLevel==="warning"?"#ffb800":"#00ff9d";
+    riskLevelSpan.textContent=riskLevel==="critical"?"⚠️ CRITICAL RISK":riskLevel==="warning"?"⚠️ WARNING":"✅ GOOD";
+    
+    const cable=pred.cable||{};
+    cableDiv.innerHTML=`<div class="pred-card"><div class="pred-title">Status: <span style="color:${cable.status==="critical"?"#ff3860":cable.status==="warning"?"#ffb800":"#00ff9d"}">${cable.status||"unknown"}</span></div><div class="pred-value">${cable.message||"No data"}</div>${cable.expected_days?`<div class="pred-action">📅 متوقع خلال ${cable.expected_days} يوماً</div>`:""}${cable.risk_percent?`<div class="pb-bg mt-2"><div class="pb-fg" style="width:${cable.risk_percent}%;background:${cable.risk_percent>70?"#ff3860":cable.risk_percent>40?"#ffb800":"#00ff9d"}"></div></div>`:""}</div>`;
+    
+    const cpu=pred.cpu||{};
+    cpuDiv.innerHTML=`<div class="pred-card"><div class="pred-title">Status: <span style="color:${cpu.status==="critical"?"#ff3860":cpu.status==="warning"?"#ffb800":"#00ff9d"}">${cpu.status||"unknown"}</span></div><div class="pred-value">${cpu.message||"No data"}</div>${cpu.action?`<div class="pred-action">🔧 ${cpu.action}</div>`:""}${cpu.risk_percent?`<div class="pb-bg"><div class="pb-fg" style="width:${cpu.risk_percent}%;background:${cpu.risk_percent>70?"#ff3860":cpu.risk_percent>40?"#ffb800":"#00ff9d"}"></div></div>`:""}</div>`;
+    
+    const broadcast=pred.broadcast||{};
+    stormDiv.innerHTML=`<div class="pred-card"><div class="pred-title">Risk: <span style="color:${broadcast.has_storm_risk?"#ff3860":"#00ff9d"}">${broadcast.has_storm_risk?"⚠️ High Risk":"✅ Low Risk"}</span></div><div class="pred-value">${broadcast.count>0?`${broadcast.count} port(s) with high discards`:"No broadcast storm indicators"}</div>${broadcast.warnings&&broadcast.warnings.length>0?`<div class="pred-action">⚠️ ${broadcast.warnings[0].message}</div>`:""}</div>`;
+    
+    const ports=pred.ports||{};
+    overloadDiv.innerHTML=ports.overloaded_ports&&ports.overloaded_ports.length>0
+      ? `<table class="tbl"><thead><tr><th>PORT</th><th>UTILIZATION</th><th>RECOMMENDATION</th></tr></thead><tbody>${ports.overloaded_ports.map(p=>`<tr class="${p.severity==="critical"?"critical-row":p.severity==="warning"?"warning-row":""}"><td style="color:#00d4ff">${p.port}<\/td><td style="color:${p.severity==="critical"?"#ff3860":"#ffb800"}">${p.utilization}%<\/td><td style="color:var(--txt2);font-size:11px">${p.fix}<\/td><\/tr>`).join("")}</tbody><\/table>`
+      : `<div style="padding:16px;color:var(--green);text-align:center">✅ No overloaded ports detected</div>`;
+    
+    if(estimates.length){
+      cableTableBody.innerHTML=estimates.map(e=>`<tr><td style="color:#00d4ff">Port ${e.port_index}<\/td><td style="color:var(--txt2)">${e.signal_strength}%<\/td><td style="color:${e.estimated_length_m>80?"#ff3860":e.estimated_length_m>50?"#ffb800":"#00ff9d"}">${e.estimated_length_m} m<\/td><td><span class="pill pill-${e.quality==="good"?"up":e.quality==="fair"?"wrn":"err"}">${e.quality}</span><\/td><\/tr>`).join("");
+    } else {
+      cableTableBody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--txt3)">No cable estimation data available<\/td><\/tr>`;
+    }
+  }catch(e){
+    cableDiv.innerHTML=`<div style="color:#ff3860;font-size:12px">Error: ${e.message}</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HEALTH REPORT
+═══════════════════════════════════════════════════════════════════ */
+async function loadHealthReport(){
+  const healthStatusDiv=document.getElementById("health-status");
+  const healthMessageSpan=document.getElementById("health-message");
+  const systemSummaryDiv=document.getElementById("system-summary");
+  const issuesBody=document.getElementById("issues-body");
+  const loopsDiv=document.getElementById("loops-duplex-info");
+  const recommendationsDiv=document.getElementById("recommendations-card");
+  
+  try{
+    const r=await fetch(API("health-report"));
+    const d=await r.json();
+    
+    const status=d.overall_status||"unknown";
+    healthStatusDiv.textContent=status==="healthy"?"✅ HEALTHY":status==="warning"?"⚠️ WARNING":"🔴 CRITICAL";
+    healthStatusDiv.style.color=status==="healthy"?"#00ff9d":status==="warning"?"#ffb800":"#ff3860";
+    healthMessageSpan.textContent=status==="healthy"?"All systems operating normally":status==="warning"?"Some issues require attention":"Critical issues detected!";
+    
+    const sys=d.system||{};
+    systemSummaryDiv.innerHTML=`<div class="info-item"><div class="info-k">MODEL</div><div class="info-v">${sys.model||"—"}</div></div><div class="info-item"><div class="info-k">IOS VERSION</div><div class="info-v">${sys.ios||"—"}</div></div><div class="info-item"><div class="info-k">UPTIME</div><div class="info-v">${sys.uptime||"—"}</div></div><div class="info-item"><div class="info-k">CPU USAGE</div><div class="info-v" style="color:${sys.cpu>90?"#ff3860":sys.cpu>70?"#ffb800":"#00ff9d"}">${sys.cpu||0}%</div></div><div class="info-item"><div class="info-k">MEMORY</div><div class="info-v" style="color:${sys.memory_percent>85?"#ff3860":sys.memory_percent>60?"#ffb800":"#00ff9d"}">${sys.memory_percent||0}%</div></div>`;
+    
+    const ports=d.ports_summary||{};
+    systemSummaryDiv.innerHTML+=`<div class="info-item"><div class="info-k">PORTS UP/DOWN</div><div class="info-v">${ports.up||0}/${ports.total||0}</div></div><div class="info-item"><div class="info-k">PORTS WITH ERRORS</div><div class="info-v" style="color:${ports.with_errors>0?"#ff3860":"#00ff9d"}">${ports.with_errors||0}</div></div><div class="info-item"><div class="info-k">POE CONSUMED</div><div class="info-v">${d.poe_summary?.consumed_w||0}W / ${d.poe_summary?.total_w||0}W</div></div>`;
+    
+    const issues=d.issues||{};
+    issuesBody.innerHTML=`<tr><td style="color:#ff3860">Critical Errors<\/td><td>${issues.critical_errors||0}<\/td><td style="color:var(--txt2);font-size:11px">Ports with critical error counts<\/td><\/tr><tr><td style="color:#ffb800">Warning Errors<\/td><td>${issues.warning_errors||0}<\/td><td style="color:var(--txt2);font-size:11px">Ports with warning-level errors<\/td><\/tr><tr><td style="color:#ff3860">Network Loops<\/td><td>${issues.has_loop?"⚠️ Detected":"✅ None"}<\/td><td style="color:var(--txt2);font-size:11px">${issues.loop_count||0} potential loops found<\/td><\/tr><tr><td style="color:#ffb800">Duplex Mismatch<\/td><td>${issues.has_duplex_mismatch?"⚠️ Detected":"✅ None"}<\/td><td style="color:var(--txt2);font-size:11px">${issues.duplex_mismatch_count||0} ports with half-duplex<\/td><\/tr>`;
+    
+    loopsDiv.innerHTML=`<div style="display:grid;gap:10px"><div><span class="risk-${issues.has_loop?"critical":"good"}"></span> Loops: ${issues.has_loop?"⚠️ Possible loop detected - check cabling":"✅ No loops detected"}</div><div><span class="risk-${issues.has_duplex_mismatch?"warning":"good"}"></span> Duplex: ${issues.has_duplex_mismatch?"⚠️ Duplex mismatch detected on some ports":"✅ Duplex settings appear correct"}</div></div>`;
+    
+    const recs=d.recommendations||[];
+    if(recs.length){
+      recommendationsDiv.innerHTML=recs.map(r=>`<div class="pred-card" style="border-left:3px solid ${r.severity==="critical"?"#ff3860":r.severity==="warning"?"#ffb800":"#00ff9d"}"><div class="pred-title">${r.title}</div><div class="pred-value">${r.description}</div><div class="pred-action">🔧 ${r.action}</div></div>`).join("");
+    } else {
+      recommendationsDiv.innerHTML=`<div style="color:var(--txt3);font-size:12px">No specific recommendations</div>`;
+    }
+  }catch(e){
+    healthStatusDiv.textContent="ERROR";
+    healthMessageSpan.textContent=`Failed to load: ${e.message}`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   WebSocket (تحديث مباشر للسويتش الحالي فقط)
+═══════════════════════════════════════════════════════════════════ */
+function connectWebSocket(){
+  const proto=location.protocol==="https:"?"wss":"ws";
+  const ws=new WebSocket(`${proto}://${location.host}/ws/network/`);
+  ws.onopen=()=>{renderAiLiveStatus("live","LIVE UPDATES");};
+  ws.onmessage=e=>{
+    let payload;
+    try{payload=JSON.parse(e.data);}catch{return;}
+    // فلترة: فقط السويتش الحالي
+    const sw=(payload.data||[]).find(s=>s.hostname===HOSTNAME);
+    if(!sw)return;
+    wsData=sw;
+    ALL_PORTS=sw.all_ports||[];
+    ALL_VLANS=sw.vlans||[];
+    scheduleSVGUpdate(ALL_PORTS);
+    if (sw.ai) {
+      renderAiDiagnosisCard(sw.ai, "live");
+    }
+    
+    if(document.getElementById("panel-vlans").classList.contains("active")) renderVlans();
+  };
+  ws.onerror=()=>{
+    renderAiLiveStatus("retry","RECONNECTING");
+    loadAiDiagnosis(true);
+  };
+  ws.onclose=()=>{
+    renderAiLiveStatus("api","API FALLBACK");
+    loadAiDiagnosis(true);
+    setTimeout(connectWebSocket,4000);
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Utilities
+═══════════════════════════════════════════════════════════════════ */
+function fmtBytes(b){
+  if(!b||b===0)return"—";
+  if(b>1e9)return(b/1e9).toFixed(1)+"G";
+  if(b>1e6)return(b/1e6).toFixed(1)+"M";
+  if(b>1e3)return(b/1e3).toFixed(1)+"K";
+  return b+"B";
+}
+
+async function refreshAllData(){
+  await loadSystem();
+  await loadIfaces();
+  await loadErrors();
+  await loadVlans();
+  await loadCdp();
+  await loadPoe();
+  await loadPortsec();
+  await loadMac();
+  await loadIpBrief();
+  await loadTdr();
+  await loadPredictions();
+  await loadAiDiagnosis(true);
+  await loadHealthReport();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════════ */
+initializeSwitchSVG();
+bootstrapSwitchPanel().finally(connectWebSocket);
+loadSystem();
+loadAiDiagnosis(true);
+
+</script>
+
+{% endblock %}

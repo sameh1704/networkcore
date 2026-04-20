@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<title>Cisco NMS</title>
+
+<style>
+
+body{
+margin:0;
+font-family:monospace;
+background:#1f2933;
+color:white;
+}
+
+.sidebar{
+position:fixed;
+width:220px;
+height:100%;
+background:#111827;
+padding-top:20px;
+}
+
+.sidebar a{
+display:block;
+padding:12px;
+color:#cbd5e1;
+text-decoration:none;
+}
+
+.sidebar a:hover{
+background:#374151;
+}
+
+.topbar{
+margin-left:220px;
+height:50px;
+background:#0f172a;
+display:flex;
+align-items:center;
+padding-left:20px;
+}
+
+.content{
+margin-left:220px;
+padding:20px;
+}
+
+.card{
+background:#111827;
+padding:20px;
+margin-bottom:20px;
+border-radius:8px;
+}
+
+.statusbar{
+position:fixed;
+bottom:0;
+left:220px;
+right:0;
+height:25px;
+background:#2563eb;
+display:flex;
+align-items:center;
+padding-left:10px;
+font-size:12px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+td,th{
+padding:8px;
+border-bottom:1px solid #374151;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="sidebar">
+
+<h3 style="padding-left:12px;">Cisco NMS</h3>
+
+<a href="/">Dashboard</a>
+<a href="/switches/">Switches</a>
+<a href="/discovery/">Network Discovery</a>
+<a href="/topology/">Topology</a>
+
+</div>
+
+
+<div class="topbar">
+
+Network Operations Center
+
+</div>
+
+
+<div class="content">
+
+{% block content %}
+
+{% endblock %}
+
+</div>
+
+
+<div class="statusbar">
+
+SSH Connected | Cisco NMS Server
+
+</div>
+
+</body>
+
+</html>

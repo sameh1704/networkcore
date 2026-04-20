@@ -1,0 +1,53 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: nms_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: nms
+      POSTGRES_USER: nms
+      POSTGRES_PASSWORD: nms123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    container_name: nms_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  django:
+    build: .
+    container_name: nms_django
+    command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+
+  celery_worker:
+    build: .
+    container_name: nms_celery_worker
+    command: celery -A config worker -l info
+    depends_on:
+      - redis
+      - postgres
+      - django
+
+  celery_beat:
+    build: .
+    container_name: nms_celery_beat
+    command: celery -A config beat -l info
+    depends_on:
+      - redis
+      - postgres
+
+volumes:
+  postgres_data:

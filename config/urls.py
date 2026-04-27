@@ -24,4 +24,6 @@ urlpatterns = [
 
     # كل النظام هنا
     path('', include('core.urls')),
+    
+    # Port Flapping URLs
 ]

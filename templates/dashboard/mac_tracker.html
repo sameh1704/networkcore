@@ -1,0 +1,1243 @@
+{% extends "layout/base.html" %}
+{% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#060b14;--bg2:#0a1220;--bg3:#0f1a2e;
+  --border:#1a2d4a;--accent:#00d4ff;--accent2:#00ff9d;
+  --warn:#ffb800;--danger:#ff3860;--ok:#00e676;
+  --text:#c8dff5;--dim:#4a6a8a;
+  --mono:'Share Tech Mono',monospace;--sans:'Exo 2',sans-serif;
+}
+body.light{
+  --bg:#f0f4fa;--bg2:#fff;--bg3:#e8eef8;--border:#c8d8ec;
+  --accent:#0066cc;--accent2:#00956e;--warn:#d68000;--danger:#cc2244;
+  --ok:#118844;--text:#1a2530;--dim:#5a7080;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body,#main-content,.content{background:var(--bg)!important;color:var(--text);font-family:var(--sans);}
+@keyframes puls{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+@keyframes blnk{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ── HEADER ── */
+.noc-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:200;flex-wrap:wrap;}
+.noc-logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-decoration:none;}
+.noc-logo em{color:var(--accent2);font-style:normal;}
+.page-title{font-family:var(--mono);font-size:13px;color:var(--accent);
+  padding:3px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--bg3);}
+.hdr-right{display:flex;gap:7px;align-items:center;flex-wrap:wrap;}
+.theme-btn{padding:3px 9px;border:1px solid var(--border);border-radius:5px;
+  background:var(--bg3);color:var(--dim);font-size:11px;cursor:pointer;}
+.back-btn{padding:3px 10px;border:1px solid var(--border);border-radius:5px;
+  background:var(--bg3);color:var(--dim);font-family:var(--mono);font-size:10px;
+  text-decoration:none;transition:border-color .2s,color .2s;}
+.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+.noc-clock{font-family:var(--mono);font-size:11px;color:var(--dim);}
+
+/* ── LAYOUT: LEFT PANEL + MAIN ── */
+.inspector-layout{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 50px);}
+.left-panel{background:var(--bg2);border-right:1px solid var(--border);
+  padding:14px 12px;overflow-y:auto;position:sticky;top:50px;height:calc(100vh - 50px);}
+.main-area{overflow-y:auto;padding:16px 20px;}
+
+/* ── LEFT PANEL ── */
+.panel-section{margin-bottom:18px;}
+.panel-title{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:2px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+
+/* Switch selector */
+.sw-sel{width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px;
+  padding:6px 8px;cursor:pointer;outline:none;}
+.sw-sel:focus{border-color:var(--accent);}
+
+/* Health badge */
+.health-badge{display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border-radius:50%;font-family:var(--mono);font-size:14px;font-weight:bold;}
+.health-good{background:var(--ok);color:#000;}
+.health-warning{background:var(--warn);color:#000;}
+.health-critical{background:var(--danger);color:#fff;}
+.health-unknown{background:var(--dim);color:#000;}
+
+/* Tool buttons */
+.tool-btn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);font-family:var(--mono);font-size:11px;cursor:pointer;
+  transition:border-color .15s,background .15s;margin-bottom:4px;text-align:left;}
+.tool-btn:hover{border-color:var(--accent);background:var(--bg3);}
+.tool-btn.active{border-color:var(--accent);color:var(--accent);background:#00d4ff0a;}
+.tool-btn .tb-icon{font-size:14px;width:18px;text-align:center;}
+.tool-btn .tb-badge{margin-left:auto;font-size:8px;padding:1px 5px;border-radius:8px;}
+.tb-badge.warn {background:#ffb80020;color:var(--warn);border:1px solid #ffb80040;}
+.tb-badge.crit {background:#ff386020;color:var(--danger);border:1px solid #ff386040;}
+.tb-badge.ok   {background:#00e67620;color:var(--ok);border:1px solid #00e67640;}
+.tb-badge.info {background:#00d4ff20;color:var(--accent);border:1px solid #00d4ff40;}
+
+/* ── TABS in main ── */
+.tab-bar{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.tab{padding:5px 14px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg2);color:var(--dim);font-family:var(--mono);font-size:10px;
+  cursor:pointer;transition:border-color .15s,color .15s;}
+.tab:hover,.tab.active{border-color:var(--accent);color:var(--accent);background:var(--bg3);}
+
+/* ── SECTION TITLE ── */
+.st{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:2px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.st::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── SEARCH BAR ── */
+.search-wrap{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;}
+.mac-input{flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:7px;color:var(--text);font-family:var(--mono);font-size:12px;
+  padding:8px 12px;outline:none;transition:border-color .2s;}
+.mac-input:focus{border-color:var(--accent);}
+.mac-input::placeholder{color:var(--dim);}
+.search-btn{padding:8px 16px;background:var(--accent);border:none;border-radius:7px;
+  color:#000;font-family:var(--mono);font-size:11px;cursor:pointer;font-weight:700;
+  transition:opacity .2s;}
+.search-btn:hover{opacity:.85;}
+.search-btn:disabled{opacity:.4;cursor:not-allowed;}
+.scope-sel{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);font-family:var(--mono);font-size:10px;padding:7px 10px;
+  cursor:pointer;outline:none;}
+
+/* ── TABLE ── */
+.data-table{width:100%;border-collapse:collapse;font-size:11px;}
+.data-table th{font-family:var(--mono);font-size:9px;color:var(--dim);
+  text-transform:uppercase;letter-spacing:1px;padding:6px 10px;
+  border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+.data-table td{padding:6px 10px;border-bottom:1px solid #0f1a2e;
+  font-family:var(--mono);font-size:11px;vertical-align:middle;}
+.data-table tr:hover td{background:var(--bg3);}
+.data-table tr:last-child td{border-bottom:none;}
+
+/* Health row colors */
+.health-row-critical{background:var(--danger);color:#fff;}
+.health-row-warning{background:var(--warn);color:#000;}
+.health-row-good{background:var(--ok);color:#000;}
+
+/* MAC cell */
+.mac-cell{font-family:var(--mono);font-size:12px;letter-spacing:.5px;}
+.mac-highlight{background:#00d4ff18;color:var(--accent);padding:1px 4px;border-radius:3px;}
+
+/* Status badges */
+.badge{display:inline-block;padding:2px 7px;border-radius:8px;font-size:9px;
+  font-family:var(--mono);border:1px solid transparent;}
+.badge.ok      {background:#00e67615;color:var(--ok);    border-color:#00e67630;}
+.badge.warn    {background:#ffb80015;color:var(--warn);  border-color:#ffb80030;}
+.badge.critical{background:#ff386015;color:var(--danger);border-color:#ff386030;}
+.badge.info    {background:#00d4ff15;color:var(--accent);border-color:#00d4ff30;}
+.badge.off     {background:#44444415;color:#888;         border-color:#44444430;}
+.badge.camera  {background:#ff80ff15;color:#ff80ff;      border-color:#ff80ff30;}
+.badge.ap      {background:#80ff8015;color:#80ff80;      border-color:#80ff8030;}
+
+/* Port status pill */
+.port-up  {color:var(--ok);}
+.port-down{color:#444;}
+.port-dis {color:var(--dim);}
+
+/* ── CARDS GRID ── */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;}
+.info-card{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;}
+.ic-label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+.ic-value{font-family:var(--mono);font-size:18px;font-weight:700;}
+.ic-sub  {font-size:10px;color:var(--dim);margin-top:2px;}
+
+/* ── PING TOOL ── */
+.ping-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:14px;}
+.ping-input-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.ping-out{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+  padding:10px;font-family:var(--mono);font-size:11px;color:var(--text);
+  white-space:pre-wrap;max-height:200px;overflow-y:auto;display:none;}
+
+/* ── STP ports ── */
+.stp-port{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+  border-radius:5px;font-family:var(--mono);font-size:10px;margin:2px;border:1px solid transparent;}
+.stp-port.forwarding{background:#00e67612;border-color:#00e67640;color:var(--ok);}
+.stp-port.blocking  {background:#ff386012;border-color:#ff386040;color:var(--danger);}
+.stp-port.learning  {background:#ffb80012;border-color:#ffb80040;color:var(--warn);}
+.stp-port.disabled  {background:#44444412;border-color:#44444440;color:#666;}
+
+/* ── VLAN rows ── */
+.vlan-row-cam{background:#ff80ff08;}
+.vlan-row-ap {background:#80ff8008;}
+
+/* ── Spinner ── */
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+
+/* ── Issue list ── */
+.issue-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:7px;
+  margin-bottom:5px;animation:fadeIn .3s ease;}
+.issue-item.critical{border-left:3px solid var(--danger);}
+.issue-item.warning {border-left:3px solid var(--warn);}
+.issue-item.info    {border-left:3px solid var(--accent);}
+.issue-sev{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.issue-sev.critical{background:var(--danger);}
+.issue-sev.warning {background:var(--warn);}
+.issue-sev.info    {background:var(--accent);}
+.issue-body{flex:1;}
+.issue-msg {font-size:11px;color:var(--text);}
+.issue-fix {font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono);}
+
+/* ── Empty / Error ── */
+.empty-state{text-align:center;padding:40px;color:var(--dim);font-family:var(--mono);font-size:12px;}
+
+/* ── Progress bar ── */
+.prog-bar{height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-top:4px;}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s;
+  background:linear-gradient(90deg,var(--accent2),var(--warn));}
+
+/* ── Timeline chart ── */
+.timeline-chart{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:16px;margin-bottom:16px;}
+.chart-container{height:200px;position:relative;}
+
+/* ── Event timeline ── */
+.event-timeline{max-height:300px;overflow-y:auto;margin-top:12px;}
+.event-item{display:flex;align-items:flex-start;gap:8px;padding:6px 10px;
+  border-bottom:1px solid var(--border);font-size:10px;}
+.event-time{width:80px;flex-shrink:0;color:var(--dim);font-family:var(--mono);}
+.event-badge{flex-shrink:0;}
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+@media(max-width:900px){
+  .inspector-layout{grid-template-columns:1fr;}
+  .left-panel{position:static;height:auto;border-right:none;border-bottom:1px solid var(--border);}
+}
+</style>
+
+<!-- HEADER -->
+<div class="noc-hdr">
+  <a href="{% url 'dashboard' %}" class="noc-logo">NOC<em>//</em>MONITOR</a>
+  <div class="page-title">◈ SWITCH INSPECTOR</div>
+  <div class="hdr-right">
+    <a href="{% url 'dashboard' %}" class="back-btn">← Dashboard</a>
+    <button class="theme-btn" onclick="toggleTheme()">☀/🌙</button>
+    <span class="noc-clock" id="clk">--:--:--</span>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="inspector-layout">
+
+  <!-- ══ LEFT PANEL ══ -->
+  <div class="left-panel">
+
+    <!-- Switch Selector -->
+    <div class="panel-section">
+      <div class="panel-title">Select Switch</div>
+      <select class="sw-sel" id="sw-select" onchange="onSwitchChange(this.value)">
+        <option value="">— Choose switch —</option>
+        {% for loc in locations %}
+        <optgroup label="{{ loc.name }}">
+          {% for sw in switches %}
+          {% if sw.location == loc %}
+          <option value="{{ sw.id }}" data-ip="{{ sw.ip_address }}" data-host="{{ sw.hostname }}">
+            {{ sw.hostname }} ({{ sw.ip_address }})
+          </option>
+          {% endif %}
+          {% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Current Switch Info -->
+    <div class="panel-section" id="sw-info-mini" style="display:none">
+      <div style="background:var(--bg3);border-radius:7px;padding:10px;border:1px solid var(--border);">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--accent)" id="mini-hostname">—</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px" id="mini-ip">—</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px" id="mini-uptime">—</div>
+        <div style="margin-top:6px;">
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);">
+            <span>CPU</span><span id="mini-cpu">—</span>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" id="mini-cpu-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tools -->
+    <div class="panel-section">
+      <div class="panel-title">Tools</div>
+      <button class="tool-btn active" onclick="showTool('mac')"     id="btn-mac">
+        <span class="tb-icon">🔍</span> MAC Table
+      </button>
+      <button class="tool-btn" onclick="showTool('ping')"    id="btn-ping">
+        <span class="tb-icon">📡</span> Ping / Connectivity
+      </button>
+      <button class="tool-btn" onclick="showTool('ifaces')"  id="btn-ifaces">
+        <span class="tb-icon">🔌</span> Interfaces
+      </button>
+      <button class="tool-btn" onclick="showTool('vlans')"   id="btn-vlans">
+        <span class="tb-icon">🏷</span> VLANs
+      </button>
+      <button class="tool-btn" onclick="showTool('stp')"     id="btn-stp">
+        <span class="tb-icon">🌳</span> STP Troubleshoot
+      </button>
+      <button class="tool-btn" onclick="showTool('duplex')"  id="btn-duplex">
+        <span class="tb-icon">⚡</span> Duplex/Speed
+      </button>
+      <button class="tool-btn" onclick="showTool('poe')"     id="btn-poe">
+        <span class="tb-icon">🔋</span> PoE Monitor
+      </button>
+      <button class="tool-btn" onclick="showTool('cdp')"     id="btn-cdp">
+        <span class="tb-icon">🗺</span> CDP Neighbors
+      </button>
+      <button class="tool-btn" onclick="showTool('vlan-ts')" id="btn-vlan-ts">
+        <span class="tb-icon">📷</span> VLAN Troubleshoot
+      </button>
+      <button class="tool-btn" onclick="showTool('env')"     id="btn-env">
+        <span class="tb-icon">🌡</span> Environment
+      </button>
+      <button class="tool-btn" onclick="showTool('psec')"    id="btn-psec">
+        <span class="tb-icon">🔒</span> Port Security
+      </button>
+      <!-- الخدمة الجديدة -->
+      <button class="tool-btn" onclick="showTool('history')" id="btn-history">
+        <span class="tb-icon">📊</span> Port History
+      </button>
+    </div>
+
+  </div><!-- /left-panel -->
+
+  <!-- ══ MAIN AREA ══ -->
+  <div class="main-area" id="main-area">
+
+    <!-- Welcome state -->
+    <div id="view-welcome">
+      <div class="empty-state">
+        <div style="font-size:32px;margin-bottom:12px">◈</div>
+        <div>اختر سويتش من القائمة اليسرى للبدء</div>
+        <div style="margin-top:8px;font-size:10px">أو استخدم بحث MAC الشامل أدناه</div>
+      </div>
+      <!-- Global MAC search always visible -->
+      <div style="max-width:600px;margin:0 auto;">
+        <div class="st">◈ GLOBAL MAC SEARCH</div>
+        <div class="search-wrap">
+          <input class="mac-input" id="global-mac-input" placeholder="xx:xx:xx:xx:xx:xx أو جزء منه…"
+            oninput="onGlobalSearchInput(this.value)"
+            onkeydown="if(event.key==='Enter')globalSearch()">
+          <button class="search-btn" onclick="globalSearch()" id="global-search-btn">Search All</button>
+        </div>
+        <div id="global-results"></div>
+      </div>
+    </div>
+
+    <!-- ── MAC TABLE ── -->
+    <div id="view-mac" style="display:none">
+      <div class="st">◈ MAC ADDRESS TABLE</div>
+      <div class="search-wrap">
+        <input class="mac-input" id="mac-filter" placeholder="Filter by MAC or port…"
+          oninput="filterMacTable(this.value)">
+        <select class="scope-sel" id="mac-vlan-filter" onchange="filterMacTable(document.getElementById('mac-filter').value)">
+          <option value="">All VLANs</option>
+        </select>
+        <span id="mac-count" style="font-family:var(--mono);font-size:11px;color:var(--dim)"></span>
+        <button class="search-btn" onclick="loadMacTable()" style="background:var(--bg3);color:var(--accent);border:1px solid var(--accent)">↻ Refresh</button>
+      </div>
+      <div id="mac-table-wrap"></div>
+    </div>
+
+    <!-- ── PING ── -->
+    <div id="view-ping" style="display:none">
+      <div class="st">◈ PING / CONNECTIVITY</div>
+      <div class="ping-wrap" id="connectivity-card">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:8px">SWITCH CONNECTIVITY CHECK</div>
+        <div id="connectivity-result"></div>
+        <button class="search-btn" onclick="checkConnectivity()" style="margin-top:8px;background:var(--bg3);color:var(--accent);border:1px solid var(--accent)">
+          Check Now
+        </button>
+      </div>
+      <div class="ping-wrap">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:8px">MANUAL PING</div>
+        <div class="ping-input-row">
+          <input class="mac-input" id="ping-target" placeholder="192.168.x.x" style="max-width:200px"
+            onkeydown="if(event.key==='Enter')doPing()">
+          <select class="scope-sel" id="ping-count">
+            <option value="4">4 packets</option>
+            <option value="8">8 packets</option>
+            <option value="10">10 packets</option>
+          </select>
+          <button class="search-btn" onclick="doPing()" id="ping-btn">Ping</button>
+        </div>
+        <div id="ping-stats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px"></div>
+        <pre class="ping-out" id="ping-out"></pre>
+      </div>
+    </div>
+
+    <!-- ── INTERFACES ── -->
+    <div id="view-ifaces" style="display:none">
+      <div class="st">◈ INTERFACES & ERROR ANALYSIS</div>
+      <div class="tab-bar">
+        <button class="tab active" onclick="ifaceTab('all',this)">All Ports</button>
+        <button class="tab" onclick="ifaceTab('up',this)">Connected</button>
+        <button class="tab" onclick="ifaceTab('down',this)">Down</button>
+        <button class="tab" onclick="ifaceTab('errors',this)">Has Errors</button>
+      </div>
+      <div id="ifaces-wrap"></div>
+      <div id="errors-wrap" style="margin-top:14px"></div>
+    </div>
+
+    <!-- ── VLANs ── -->
+    <div id="view-vlans" style="display:none">
+      <div class="st">◈ VLAN TABLE</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="tab active" onclick="vlanTab('all',this)">All</button>
+        <button class="tab" onclick="vlanTab('camera',this)">📷 Cameras</button>
+        <button class="tab" onclick="vlanTab('ap',this)">📶 Access Points</button>
+        <button class="tab" onclick="vlanTab('active',this)">Active</button>
+      </div>
+      <div id="vlans-wrap"></div>
+    </div>
+
+    <!-- ── STP ── -->
+    <div id="view-stp" style="display:none">
+      <div class="st">◈ STP TROUBLESHOOT</div>
+      <div id="stp-wrap"></div>
+    </div>
+
+    <!-- ── DUPLEX ── -->
+    <div id="view-duplex" style="display:none">
+      <div class="st">◈ DUPLEX / SPEED ANALYSIS</div>
+      <div id="duplex-wrap"></div>
+    </div>
+
+    <!-- ── POE ── -->
+    <div id="view-poe" style="display:none">
+      <div class="st">◈ POE MONITORING</div>
+      <div id="poe-wrap"></div>
+    </div>
+
+    <!-- ── CDP ── -->
+    <div id="view-cdp" style="display:none">
+      <div class="st">◈ CDP NEIGHBORS</div>
+      <div id="cdp-wrap"></div>
+    </div>
+
+    <!-- ── VLAN TROUBLESHOOT ── -->
+    <div id="view-vlan-ts" style="display:none">
+      <div class="st">◈ VLAN TROUBLESHOOT — CAMERAS & APs</div>
+      <div id="vlan-ts-wrap"></div>
+    </div>
+
+    <!-- ── ENV ── -->
+    <div id="view-env" style="display:none">
+      <div class="st">◈ ENVIRONMENT (TEMP / FAN / PSU)</div>
+      <div id="env-wrap"></div>
+    </div>
+
+    <!-- ── PORT SECURITY ── -->
+    <div id="view-psec" style="display:none">
+      <div class="st">◈ PORT SECURITY</div>
+      <div id="psec-wrap"></div>
+    </div>
+
+    <!-- ── PORT HISTORY (الخدمة الجديدة) ── -->
+    <div id="view-history" style="display:none">
+      <div class="st">◈ PORT HEALTH SCORE</div>
+      <div id="health-summary" class="cards-grid" style="margin-bottom:16px"></div>
+      <div id="ports-health-wrap"></div>
+
+      <div class="st" style="margin-top:20px">◈ FLAPPING PORTS REPORT</div>
+      <div id="flap-report-wrap"></div>
+
+      <div class="st" style="margin-top:20px">◈ RECENT EVENTS</div>
+      <div class="tab-bar">
+        <button class="tab active" onclick="historyTab('all',this)">All Events</button>
+        <button class="tab" onclick="historyTab('critical',this)">Critical</button>
+        <button class="tab" onclick="historyTab('warning',this)">Warning</button>
+        <button class="tab" onclick="historyTab('info',this)">Info</button>
+      </div>
+      <div id="events-wrap"></div>
+
+      <div class="st" style="margin-top:20px">◈ PORT DETAILS</div>
+      <div class="search-wrap">
+        <select class="scope-sel" id="port-select" onchange="loadPortDetail(this.value)">
+          <option value="">— Select port —</option>
+        </select>
+        <button class="search-btn" onclick="loadPortDetail($('port-select').value)" style="background:var(--bg3);color:var(--accent);border:1px solid var(--accent)">
+          Show Timeline
+        </button>
+      </div>
+      <div id="port-detail-wrap"></div>
+    </div>
+
+  </div><!-- /main-area -->
+</div><!-- /inspector-layout -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Theme & Clock ─────────────────────────────────────────
+(function(){if(localStorage.getItem('noc-theme')==='light')document.body.classList.add('light');})();
+function toggleTheme(){document.body.classList.toggle('light');
+  localStorage.setItem('noc-theme',document.body.classList.contains('light')?'light':'dark');}
+setInterval(()=>document.getElementById('clk').textContent=new Date().toLocaleTimeString('en-GB'),1000);
+
+// ── API Helper ───────────────────────────────────────────
+const API = (endpoint) => fetch(`/api/${endpoint}`).then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+    return r.json();
+});
+
+// ── State ─────────────────────────────────────────────────
+let CURRENT_SW  = null;
+let CURRENT_TOOL= 'mac';
+let _macData    = [];
+let _ifaceData  = [];
+let _vlanData   = [];
+let _historyData = null;
+
+// ── Helpers ───────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+function spin(el){el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';}
+function err(el,msg){el.innerHTML=`<div class="empty-state" style="color:var(--danger)">${msg}</div>`;}
+
+function badge(txt,cls){return`<span class="badge ${cls}">${txt}</span>`;}
+
+function csrfToken(){
+  return document.cookie.split(';')
+    .find(c=>c.trim().startsWith('csrftoken='))
+    ?.split('=')[1]||'';
+}
+
+// ── Switch selection ──────────────────────────────────────
+function onSwitchChange(swId){
+  if(!swId){CURRENT_SW=null;$('sw-info-mini').style.display='none';return;}
+  const opt=[...$('sw-select').options].find(o=>o.value==swId);
+  CURRENT_SW={id:swId,hostname:opt?.dataset.host||'',ip:opt?.dataset.ip||''};
+  $('sw-info-mini').style.display='block';
+  $('mini-hostname').textContent=CURRENT_SW.hostname;
+  $('mini-ip').textContent=CURRENT_SW.ip;
+  loadSysInfoMini();
+  loadCurrentTool();
+}
+
+function loadSysInfoMini(){
+  if(!CURRENT_SW)return;
+  API(`system/${CURRENT_SW.id}/`).then(d=>{
+    $('mini-uptime').textContent='Up: '+( d.uptime||'—');
+    $('mini-cpu').textContent=d.cpu_5s+'%';
+    $('mini-cpu-bar').style.width=Math.min(100,d.cpu_5s)+'%';
+  }).catch(()=>{});
+}
+
+// ── Tool switching ────────────────────────────────────────
+function showTool(tool){
+  CURRENT_TOOL=tool;
+  document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
+  $('btn-'+tool)?.classList.add('active');
+
+  ['welcome','mac','ping','ifaces','vlans','stp','duplex','poe','cdp','vlan-ts','env','psec','history']
+    .forEach(v=>$('view-'+v).style.display='none');
+
+  $('view-'+tool).style.display='block';
+  if(CURRENT_SW) loadCurrentTool();
+}
+
+function loadCurrentTool(){
+  if(!CURRENT_SW){$('view-welcome').style.display='block';return;}
+  $('view-welcome').style.display='none';
+
+  const loaders={
+    mac:     loadMacTable,
+    ping:    loadPingView,
+    ifaces:  loadIfaces,
+    vlans:   loadVlans,
+    stp:     loadStp,
+    duplex:  loadDuplex,
+    poe:     loadPoe,
+    cdp:     loadCdp,
+    'vlan-ts':loadVlanTs,
+    env:     loadEnv,
+    psec:    loadPsec,
+    history: loadHistory,
+  };
+  loaders[CURRENT_TOOL]?.();
+}
+
+// ════════════════════════════════════════════════════════
+//  MAC TABLE (مثل السابق)
+// ════════════════════════════════════════════════════════
+async function loadMacTable(){
+  if(!CURRENT_SW)return;
+  const wrap=$('mac-table-wrap');
+  spin(wrap);
+  try{
+    const d=await API(`mac/${CURRENT_SW.id}/?limit=1000`);
+    _macData=d.mac_table||[];
+    const vlans=[...new Set(_macData.map(e=>e.vlan_id).filter(Boolean))].sort((a,b)=>a-b);
+    $('mac-vlan-filter').innerHTML='<option value="">All VLANs</option>'+
+      vlans.map(v=>`<option value="${v}">VLAN ${v}</option>`).join('');
+    renderMacTable(_macData, d.total);
+  }catch(e){err(wrap,'Error loading MAC table: '+e.message);}
+}
+
+function renderMacTable(data, total){
+  const wrap=$('mac-table-wrap');
+  $('mac-count').textContent=`${data.length} / ${total||data.length} entries`;
+  if(!data.length){wrap.innerHTML='<div class="empty-state">No MAC entries found</div>';return;}
+  const typeColor={learned:'ok',self:'info',mgmt:'info',other:'off'};
+  wrap.innerHTML=`<table class="data-table">
+    <thead><tr><th>MAC Address</th><th>Port</th><th>VLAN</th><th>Type</th></tr></thead>
+    <tbody>${data.map(e=>`<tr><td class="mac-cell">${e.mac}<\/td>
+      <td style="color:var(--accent);font-family:var(--mono)">${e.port||'—'}<\/td>
+      <td>${e.vlan_id!=null?badge('VLAN '+e.vlan_id,'info'):'—'}<\/td>
+      <td>${badge(e.type||'learned',typeColor[e.type]||'off')}<\/td><\/tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function filterMacTable(q){
+  const vlanF=$('mac-vlan-filter').value;
+  let data=_macData;
+  if(vlanF) data=data.filter(e=>String(e.vlan_id)===vlanF);
+  if(q){
+    const ql=q.toLowerCase();
+    data=data.filter(e=>e.mac.includes(ql)||(e.port||'').toLowerCase().includes(ql));
+  }
+  renderMacTable(data,_macData.length);
+}
+
+// ════════════════════════════════════════════════════════
+//  GLOBAL MAC SEARCH
+// ════════════════════════════════════════════════════════
+let _searchTimer=null;
+function onGlobalSearchInput(v){
+  clearTimeout(_searchTimer);
+  if(v.length>=4) _searchTimer=setTimeout(globalSearch,500);
+}
+
+async function globalSearch(){
+  const q=$('global-mac-input').value.trim();
+  if(q.length<4)return;
+  const res=$('global-results');
+  res.innerHTML='<div style="text-align:center;padding:20px;"><div class="spinner"></div></div>';
+  $('global-search-btn').disabled=true;
+  try{
+    const d=await API(`mac/search/?q=${encodeURIComponent(q)}`);
+    $('global-search-btn').disabled=false;
+    if(!d.results.length){
+      res.innerHTML='<div class="empty-state">No results for "'+q+'"</div>';
+      return;
+    }
+    res.innerHTML=`
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:8px">
+        ${d.count} result${d.count>1?'s':''} for "${d.query}"
+      </div>
+      <table class="data-table">
+        <thead><tr><th>MAC</th><th>Switch</th><th>Location</th><th>Port</th><th>VLAN</th><th>Type</th></tr></thead>
+        <tbody>${d.results.map(r=>`<tr>
+          <td class="mac-cell"><span class="mac-highlight">${r.mac}</span><\/td>
+          <td style="color:var(--accent);font-family:var(--mono)">${r.switch_hostname}<\/td>
+          <td style="color:var(--dim)">${r.location}<\/td>
+          <td style="color:var(--accent2);font-family:var(--mono)">${r.port||'—'}<\/td>
+          <td>${r.vlan_id!=null?badge('VLAN '+r.vlan_id,'info'):'—'}<\/td>
+          <td>${badge(r.type||'learned','ok')}<\/td><\/tr>`).join('')}
+        </tbody>
+      </tr>`;
+  }catch(e){
+    $('global-search-btn').disabled=false;
+    err(res,'Search error: '+e.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  PING
+// ════════════════════════════════════════════════════════
+function loadPingView(){
+  if(CURRENT_SW) $('ping-target').value=$('ping-target').value||CURRENT_SW.ip;
+  checkConnectivity();
+}
+
+async function checkConnectivity(){
+  if(!CURRENT_SW)return;
+  const res=$('connectivity-result');
+  res.innerHTML='<div class="spinner"></div>';
+  try{
+    const d=await API(`connectivity/${CURRENT_SW.id}/`);
+    const sc={online:'ok',degraded:'warn',offline:'critical'}[d.status]||'off';
+    res.innerHTML=`<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        ${badge(d.status.toUpperCase(),sc)}
+        <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">
+          SNMP: ${d.snmp_ok?'✓':'✗'} &nbsp; Ping: ${d.ping_ok?'✓':'✗'}
+          ${d.uptime?'&nbsp; Uptime: '+d.uptime:''}
+        </span>
+      </div>`;
+  }catch(e){err(res,'Error: '+e.message);}
+}
+
+async function doPing(){
+  const target=$('ping-target').value.trim();
+  if(!target)return;
+  const count=parseInt($('ping-count').value)||4;
+  const btn=$('ping-btn'), out=$('ping-out'), stats=$('ping-stats');
+  btn.disabled=true;btn.textContent='…';
+  out.style.display='block';out.textContent='Pinging '+target+'…';
+  stats.innerHTML='';
+  try{
+    const d=await fetch('/api/ping/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken()},
+      body:JSON.stringify({target,count}),
+    }).then(r=>r.json());
+    out.textContent=d.output||d.error||'No output';
+    if(d.stats){
+      const s=d.stats;
+      stats.innerHTML=`
+        <div class="info-card" style="padding:8px 12px;flex:1;min-width:120px">
+          <div class="ic-label">Sent</div><div class="ic-value" style="font-size:16px">${s.sent}</div>
+        </div>
+        <div class="info-card" style="padding:8px 12px;flex:1;min-width:120px">
+          <div class="ic-label">Received</div>
+          <div class="ic-value" style="font-size:16px;color:${s.received==s.sent?'var(--ok)':'var(--danger)'}">${s.received}</div>
+        </div>
+        <div class="info-card" style="padding:8px 12px;flex:1;min-width:120px">
+          <div class="ic-label">Loss</div>
+          <div class="ic-value" style="font-size:16px;color:${s.loss_pct>0?'var(--danger)':'var(--ok)'}">${s.loss_pct}%</div>
+        </div>
+        ${s.avg_ms!=null?`<div class="info-card" style="padding:8px 12px;flex:1;min-width:120px">
+          <div class="ic-label">Avg RTT</div><div class="ic-value" style="font-size:16px">${s.avg_ms}ms</div>
+        </div>`:''}`;
+    }
+  }catch(e){out.textContent='Error: '+e.message;}
+  btn.disabled=false;btn.textContent='Ping';
+}
+
+// ════════════════════════════════════════════════════════
+//  INTERFACES
+// ════════════════════════════════════════════════════════
+let _ifaceFilter='all';
+async function loadIfaces(){
+  const wrap=$('ifaces-wrap');spin(wrap);
+  try{
+    const d=await API(`interfaces/${CURRENT_SW.id}/`);
+    _ifaceData=d.interfaces||[];
+    renderIfaces('all');
+    renderErrors(d.errors||[]);
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+function ifaceTab(f,btn){
+  document.querySelectorAll('#view-ifaces .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderIfaces(f);
+}
+
+function renderIfaces(f){
+  let data=_ifaceData;
+  if(f==='up')   data=data.filter(i=>i.status==='connected');
+  if(f==='down') data=data.filter(i=>i.status==='notconnect');
+  if(f==='errors')data=data.filter(i=>i.has_errors);
+  const wrap=$('ifaces-wrap');
+  if(!data.length){wrap.innerHTML='<div class="empty-state">No interfaces</div>';return;}
+  const stC={connected:'ok',notconnect:'off',disabled:'critical'};
+  wrap.innerHTML=`<table class="data-table">
+    <thead><tr><th>Port</th><th>Status</th><th>Speed</th><th>Traffic</th><th>In Err</th><th>Out Err</th><th>Discards</th><th>Alias</th></tr></thead>
+    <tbody>${data.map(i=>`<tr>
+      <td style="font-family:var(--mono);color:var(--accent)">${i.name}<\/td>
+      <td>${badge(i.status,stC[i.status]||'off')}<\/td>
+      <td style="font-family:var(--mono)">${i.speed_str}<\/td>
+      <td style="font-family:var(--mono)">${i.traffic_mbps}M<\/td>
+      <td style="color:${i.in_errors>100?'var(--danger)':i.in_errors>0?'var(--warn)':'var(--dim)'}">${i.in_errors}<\/td>
+      <td style="color:${i.out_errors>100?'var(--danger)':i.out_errors>0?'var(--warn)':'var(--dim)'}">${i.out_errors}<\/td>
+      <td style="color:${(i.in_discards+i.out_discards)>50?'var(--warn)':'var(--dim)'}">${i.in_discards+i.out_discards}<\/td>
+      <td style="font-size:10px;color:var(--dim)">${i.alias||'—'}<\/td><\/tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function renderErrors(errors){
+  const wrap=$('errors-wrap');
+  if(!errors.length){wrap.innerHTML='';return;}
+  wrap.innerHTML=`<div class="st" style="margin-top:14px">◈ ERROR ANALYSIS</div>`+
+    errors.map(e=>`
+      <div class="issue-item ${e.severity}">
+        <div class="issue-sev ${e.severity}"></div>
+        <div class="issue-body">
+          <div class="issue-msg"><strong>${e.name}</strong> — in_err:${e.in_errors} out_err:${e.out_errors} discards:${e.in_discards+e.out_discards}</div>
+          ${e.causes.map(c=>`<div class="issue-fix">▸ ${c}</div>`).join('')}
+          ${e.fixes.map(f=>`<div class="issue-fix" style="color:var(--accent2)">→ ${f}</div>`).join('')}
+        </div>
+      </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════════
+//  VLANs
+// ════════════════════════════════════════════════════════
+async function loadVlans(){
+  const wrap=$('vlans-wrap');spin(wrap);
+  try{
+    _vlanData=await API(`vlans/${CURRENT_SW.id}/`);
+    renderVlans('all');
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+function vlanTab(f,btn){
+  document.querySelectorAll('#view-vlans .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderVlans(f);
+}
+
+function renderVlans(f){
+  let data=_vlanData;
+  if(f==='camera') data=data.filter(v=>v.is_camera);
+  if(f==='ap')     data=data.filter(v=>v.is_ap);
+  if(f==='active') data=data.filter(v=>v.active);
+  const wrap=$('vlans-wrap');
+  if(!data.length){wrap.innerHTML='<div class="empty-state">No VLANs found</div>';return;}
+  wrap.innerHTML=`<table class="data-table">
+    <thead><tr><th>VLAN ID</th><th>Name</th><th>State</th><th>Ports</th><th>Type</th></tr></thead>
+    <tbody>${data.map(v=>`<tr class="${v.is_camera?'vlan-row-cam':v.is_ap?'vlan-row-ap':''}">
+      <td style="font-family:var(--mono);font-weight:700;color:var(--accent)">${v.vlan_id}<\/td>
+      <td>${v.name}<\/td>
+      <td>${badge(v.active?'Active':'Inactive',v.active?'ok':'critical')}<\/td>
+      <td style="font-family:var(--mono);font-size:10px">${(v.port_names||[]).slice(0,6).join(', ')+(v.port_count>6?' …':'')||'—'}<\/td>
+      <td>${v.is_camera?badge('📷 Camera','camera'):v.is_ap?badge('📶 AP','ap'):badge('Data','info')}<\/td><\/tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ════════════════════════════════════════════════════════
+//  STP
+// ════════════════════════════════════════════════════════
+async function loadStp(){
+  const wrap=$('stp-wrap');spin(wrap);
+  try{
+    const d=await API(`stp/${CURRENT_SW.id}/`);
+    let html=`
+      <div class="cards-grid">
+        <div class="info-card"><div class="ic-label">Root Bridge</div><div class="ic-value" style="font-size:13px">${d.root_bridge||'N/A'}</div></div>
+        <div class="info-card"><div class="ic-label">Forwarding Ports</div><div class="ic-value" style="color:var(--ok)">${d.forwarding_count}</div></div>
+        <div class="info-card"><div class="ic-label">Blocking Ports</div><div class="ic-value" style="color:${d.blocking_count>0?'var(--warn)':'var(--ok)'}">${d.blocking_count}</div></div>
+      </div>`;
+    if(d.analysis?.length){
+      html+=`<div class="st" style="margin:12px 0 8px">⚠ ISSUES</div>`;
+      html+=d.analysis.map(a=>`<div class="issue-item ${a.severity}">
+        <div class="issue-sev ${a.severity}"></div>
+        <div class="issue-body"><div class="issue-msg">${a.msg}</div></div>
+      </div>`).join('');
+    }
+    html+=`<div class="st" style="margin:12px 0 8px">PORT STATES</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${(d.ports||[]).map(p=>`<div class="stp-port ${p.stp_state}" title="${p.port}">${p.port}</div>`).join('')}
+      </div>`;
+    wrap.innerHTML=html;
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  DUPLEX
+// ════════════════════════════════════════════════════════
+async function loadDuplex(){
+  const wrap=$('duplex-wrap');spin(wrap);
+  try{
+    const d=await API(`duplex/${CURRENT_SW.id}/`);
+    if(d.clean){
+      wrap.innerHTML='<div class="empty-state" style="color:var(--ok)">✓ No duplex/speed issues detected</div>';
+      return;
+    }
+    wrap.innerHTML=`
+      <div style="margin-bottom:10px;font-family:var(--mono);font-size:11px;color:var(--warn)">
+        ⚠ ${d.total_issues} issue${d.total_issues>1?'s':''} detected
+      </div>`+
+      d.issues.map(i=>`
+        <div class="issue-item ${i.severity}">
+          <div class="issue-sev ${i.severity}"></div>
+          <div class="issue-body">
+            <div class="issue-msg"><strong>${i.port}</strong> (${i.speed}) — in_err:${i.in_errors} out_err:${i.out_errors}</div>
+            <div class="issue-fix" style="color:var(--warn)">▸ ${i.diagnosis}</div>
+            ${i.fix.map(f=>`<div class="issue-fix" style="color:var(--accent2)">→ ${f}</div>`).join('')}
+          </div>
+        </div>`).join('');
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  POE
+// ════════════════════════════════════════════════════════
+async function loadPoe(){
+  const wrap=$('poe-wrap');spin(wrap);
+  try{
+    const d=await API(`poe/${CURRENT_SW.id}/`);
+    const usedP=d.total_w?Math.round(d.consumed_w/d.total_w*100):0;
+    let html=`
+      <div class="cards-grid">
+        <div class="info-card"><div class="ic-label">Total Budget</div><div class="ic-value">${d.total_w}W</div></div>
+        <div class="info-card"><div class="ic-label">Consumed</div>
+          <div class="ic-value" style="color:${usedP>80?'var(--danger)':usedP>60?'var(--warn)':'var(--ok)'}">${d.consumed_w}W</div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${usedP}%"></div></div>
+        </div>
+        <div class="info-card"><div class="ic-label">Available</div><div class="ic-value" style="color:var(--accent2)">${d.available_w}W</div></div>
+        <div class="info-card"><div class="ic-label">Faulty Ports</div><div class="ic-value" style="color:${d.faulty?.length?'var(--danger)':'var(--ok)'}">${d.faulty?.length||0}</div></div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Port</th><th>Status</th><th>Power</th><th>Class</th></tr></thead>
+        <tbody>${(d.ports||[]).map(p=>`<tr>
+          <td style="font-family:var(--mono);color:var(--accent)">${p.port}<\/td>
+          <td>${badge(p.status,{on:'ok',off:'off',fault:'critical',deny:'warn',searching:'info'}[p.status]||'off')}<\/td>
+          <td style="font-family:var(--mono)">${p.power_w}W<\/td>
+          <td style="color:var(--dim)">${p.class}<\/td><\/tr>`).join('')}
+        </tbody>
+      </table>`;
+    wrap.innerHTML=html;
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  CDP
+// ════════════════════════════════════════════════════════
+async function loadCdp(){
+  const wrap=$('cdp-wrap');spin(wrap);
+  try{
+    const d=await API(`cdp/${CURRENT_SW.id}/`);
+    if(!d.length){wrap.innerHTML='<div class="empty-state">No CDP neighbors found</div>';return;}
+    wrap.innerHTML=`<table class="data-table">
+      <thead><table><th>Local Port</th><th>Device</th><th>IP</th><th>Remote Port</th><th>Platform</th></tr></thead>
+      <tbody>${d.map(n=>`<tr>
+        <td style="font-family:var(--mono);color:var(--accent)">${n.local_port}<\/td>
+        <td style="color:var(--accent2)">${n.device_id}<\/td>
+        <td style="font-family:var(--mono)">${n.ip||'—'}<\/td>
+        <td style="font-family:var(--mono);color:var(--dim)">${n.remote_port}<\/td>
+        <td style="font-size:10px;color:var(--dim)">${n.platform}<\/td><\/tr>`).join('')}
+      </tbody>
+    </table>`;
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  VLAN TROUBLESHOOT
+// ════════════════════════════════════════════════════════
+async function loadVlanTs(){
+  const wrap=$('vlan-ts-wrap');spin(wrap);
+  try{
+    const d=await API(`vlan/troubleshoot/${CURRENT_SW.id}/`);
+    let html='';
+    if(d.camera_vlans?.length){
+      html+=`<div class="st" style="margin-bottom:8px">📷 CAMERA VLANs</div>`;
+      html+=d.camera_vlans.map(v=>`
+        <div class="info-card" style="margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            ${badge('VLAN '+v.vlan_id,'camera')}
+            <span style="font-family:var(--mono);color:var(--text)">${v.name}</span>
+            ${badge(v.active?'Active':'Inactive',v.active?'ok':'critical')}
+            <span style="font-size:10px;color:var(--dim)">${v.port_count} ports</span>
+          </div>
+          <div style="font-size:10px;color:var(--dim);margin-top:4px;font-family:var(--mono)">
+            ${(v.port_names||[]).join(', ')||'No ports assigned'}
+          </div>
+        </div>`).join('');
+    } else {
+      html+=`<div class="issue-item info" style="margin-bottom:8px">
+        <div class="issue-sev info"></div>
+        <div class="issue-body"><div class="issue-msg">لم يتم اكتشاف VLAN مخصصة للكاميرات — تحقق من أسماء VLANs أو أن VLAN 100 موجودة</div></div>
+      </div>`;
+    }
+    if(d.ap_vlans?.length){
+      html+=`<div class="st" style="margin:12px 0 8px">📶 ACCESS POINT VLANs</div>`;
+      html+=d.ap_vlans.map(v=>`
+        <div class="info-card" style="margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            ${badge('VLAN '+v.vlan_id,'ap')}
+            <span style="font-family:var(--mono);color:var(--text)">${v.name}</span>
+            ${badge(v.active?'Active':'Inactive',v.active?'ok':'critical')}
+            <span style="font-size:10px;color:var(--dim)">${v.port_count} ports</span>
+          </div>
+          <div style="font-size:10px;color:var(--dim);margin-top:4px;font-family:var(--mono)">
+            ${(v.port_names||[]).join(', ')||'No ports assigned'}
+          </div>
+        </div>`).join('');
+    }
+    if(d.issues?.length){
+      html+=`<div class="st" style="margin:12px 0 8px">⚠ ISSUES (${d.total_issues})</div>`;
+      html+=d.issues.map(i=>`
+        <div class="issue-item ${i.severity}">
+          <div class="issue-sev ${i.severity}"></div>
+          <div class="issue-body">
+            <div class="issue-msg">${i.msg}</div>
+            ${i.fix?`<div class="issue-fix" style="color:var(--accent2)">→ ${i.fix}</div>`:''}
+          </div>
+        </div>`).join('');
+    } else if(d.camera_vlans?.length||d.ap_vlans?.length){
+      html+=`<div style="margin-top:10px;color:var(--ok);font-family:var(--mono);font-size:11px">✓ No VLAN issues detected</div>`;
+    }
+    wrap.innerHTML=html||'<div class="empty-state">No VLAN data available</div>';
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  ENVIRONMENT
+// ════════════════════════════════════════════════════════
+async function loadEnv(){
+  const wrap=$('env-wrap');spin(wrap);
+  try{
+    const d=await API(`environment/${CURRENT_SW.id}/`);
+    const stC={normal:'ok',warning:'warn',critical:'critical',shutdown:'critical',notPresent:'off',notFunctioning:'critical'};
+    const section=(title,items)=>{
+      if(!items?.length)return'';
+      return`<div class="st" style="margin:10px 0 6px">${title}</div>`+
+        `<div style="display:flex;flex-wrap:wrap;gap:6px">`+
+        items.map(i=>`<div class="info-card" style="padding:8px 12px;min-width:100px">
+          <div class="ic-label">#${i.id}</div>
+          <div>${badge(i.status,stC[i.status]||'off')}</div>
+        </div>`).join('')+`</div>`;
+    };
+    wrap.innerHTML=
+      section('🌡 TEMPERATURES', d.temperatures)+
+      section('🌀 FANS', d.fans)+
+      section('⚡ POWER SUPPLIES', d.power_supplies)||
+      '<div class="empty-state">No environment data available</div>';
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  PORT SECURITY
+// ════════════════════════════════════════════════════════
+async function loadPsec(){
+  const wrap=$('psec-wrap');spin(wrap);
+  try{
+    const d=await API(`port-security/${CURRENT_SW.id}/`);
+    if(!d.enabled){
+      wrap.innerHTML='<div class="empty-state">Port Security is not enabled on this switch</div>';
+      return;
+    }
+    wrap.innerHTML=`
+      <div class="cards-grid" style="margin-bottom:12px">
+        <div class="info-card"><div class="ic-label">Enabled Ports</div><div class="ic-value" style="color:var(--accent)">${d.enabled_count}</div></div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Port</th><th>Status</th><th>Max MACs</th><th>Current MACs</th><th>Violation Mode</th></tr></thead>
+        <tbody>${(d.ports||[]).filter(p=>p.status==='enabled').map(p=>`<tr>
+          <td style="font-family:var(--mono);color:var(--accent)">${p.port}<\/td>
+          <td>${badge(p.status,'ok')}<\/td>
+          <td style="font-family:var(--mono)">${p.max_mac}<\/td>
+          <td style="font-family:var(--mono);color:${p.current_mac>=p.max_mac?'var(--danger)':'var(--ok)'}">${p.current_mac}<\/td>
+          <td style="color:var(--dim)">${p.violation}<\/td><\/tr>`).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){err(wrap,'Error: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════
+//  PORT HISTORY (الخدمة الجديدة)
+// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+//  PORT HISTORY (الخدمة الجديدة) - النسخة المصححة
+// ════════════════════════════════════════════════════════
+let _currentEventFilter = 'all';
+let _healthChart = null;
+
+async function loadHistory(){
+  if(!CURRENT_SW) return;
+  
+  console.log("Loading history for switch ID:", CURRENT_SW.id);
+  
+  // Load summary
+  try{
+    const summary = await API(`history/summary/${CURRENT_SW.id}/?hours=24`);
+    console.log("Summary response:", summary);
+    
+    $('health-summary').innerHTML=`
+      <div class="info-card"><div class="ic-label">Total Events</div><div class="ic-value">${summary.total_events || 0}</div></div>
+      <div class="info-card"><div class="ic-label">Critical Ports</div><div class="ic-value" style="color:var(--danger)">${summary.health_summary?.critical || 0}</div></div>
+      <div class="info-card"><div class="ic-label">Warning Ports</div><div class="ic-value" style="color:var(--warn)">${summary.health_summary?.warning || 0}</div></div>
+      <div class="info-card"><div class="ic-label">Healthy Ports</div><div class="ic-value" style="color:var(--ok)">${summary.health_summary?.ok || 0}</div></div>
+    `;
+  }catch(e){
+    console.error('summary error',e);
+    $('health-summary').innerHTML='<div class="empty-state">No data available yet. Please wait 5 minutes for first snapshot.</div>';
+  }
+  
+  // Load ports health
+  try{
+    const health = await API(`history/health/${CURRENT_SW.id}/?hours=24`);
+    console.log("Health response:", health);
+    
+    if(!health.length){
+      $('ports-health-wrap').innerHTML='<div class="empty-state">No port health data. Make sure Celery is running and collecting snapshots.</div>';
+    } else {
+      $('ports-health-wrap').innerHTML=`
+        <table class="data-table">
+          <thead><tr><th>Port</th><th>Health</th><th>Status</th><th>Flaps</th><th>CRC</th><th>Drops</th><th>PoE</th></tr></thead>
+          <tbody>${health.map(p=>`<tr class="health-row-${p.severity}">
+            <td style="font-family:var(--mono);color:var(--accent);font-weight:bold">${p.port}<\/td>
+            <td><div class="health-badge health-${p.severity}">${p.health}%</div><\/td>
+            <td>${badge(p.status,p.status==='connected'?'ok':'off')}<\/td>
+            <td style="color:${p.flaps>0?'var(--warn)':'var(--ok)'}">${p.flaps}<\/td>
+            <td style="color:${p.crc_events>0?'var(--warn)':'var(--ok)'}">${p.crc_events}<\/td>
+            <td style="color:${p.drop_events>0?'var(--warn)':'var(--ok)'}">${p.drop_events}<\/td>
+            <td style="color:${p.poe_faults>0?'var(--danger)':'var(--ok)'}">${p.poe_faults}<\/td><\/tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+  }catch(e){
+    console.error('health error',e);
+    err($('ports-health-wrap'),'Error loading health: '+e.message);
+  }
+  
+  // Load flap report
+  try{
+    const flaps = await API(`history/flaps/${CURRENT_SW.id}/?hours=24`);
+    console.log("Flaps response:", flaps);
+    
+    if(flaps && flaps.length){
+      $('flap-report-wrap').innerHTML=`
+        <table class="data-table">
+          <thead><tr><th>Port</th><th>Flaps</th><th>Hourly Rate</th><th>Diagnosis</th><th>Action</th></tr></thead>
+          <tbody>${flaps.map(f=>`<tr class="health-row-${f.severity}">
+            <td style="font-family:var(--mono);color:var(--accent)">${f.port_name}<\/td>
+            <td style="color:${f.severity==='critical'?'var(--danger)':'var(--warn)'}">${f.total_flaps}<\/td>
+            <td>${f.hourly_rate}<\/td>
+            <td style="font-size:10px">${f.diagnosis || '—'}<\/td>
+            <td style="font-size:10px">${Array.isArray(f.fix)?f.fix[0]:f.fix || '—'}<\/td><\/tr>`).join('')}
+          </tbody>
+        </table>`;
+    } else {
+      $('flap-report-wrap').innerHTML='<div class="empty-state">No flapping ports detected</div>';
+    }
+  }catch(e){
+    console.error('flaps error',e);
+  }
+  
+  // Populate port select from health data
+  try{
+    const health = await API(`history/health/${CURRENT_SW.id}/?hours=24`);
+    if(health && health.length){
+      $('port-select').innerHTML='<option value="">— Select port —</option>'+
+        health.map(p=>`<option value="${p.port}">${p.port} (${p.health}%)</option>`).join('');
+    } else {
+      $('port-select').innerHTML='<option value="">— No ports found —</option>';
+    }
+  }catch(e){
+    console.error('port select error',e);
+  }
+  
+  // Load events
+  loadEvents();
+}
+
+function historyTab(filter, btn){
+  _currentEventFilter = filter;
+  document.querySelectorAll('#view-history .tab-bar .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  loadEvents();
+}
+
+async function loadEvents(){
+  if(!CURRENT_SW) return;
+  try{
+    const url = `history/events/${CURRENT_SW.id}/?hours=24` + 
+                (_currentEventFilter !== 'all' ? `&severity=${_currentEventFilter}` : '');
+    const events = await API(url);
+    console.log("Events response:", events);
+    
+    if(!events.events || !events.events.length){
+      $('events-wrap').innerHTML='<div class="empty-state">No events in the last 24 hours. Make sure Celery is running.</div>';
+      return;
+    }
+    $('events-wrap').innerHTML=`<div class="event-timeline">
+      ${events.events.map(e=>`
+        <div class="event-item">
+          <div class="event-time">${new Date(e.occurred_at).toLocaleTimeString()}</div>
+          <div class="event-badge">${badge(e.event_type, e.severity)}</div>
+          <div style="flex:1"><strong>${e.port_name}</strong> — ${e.description || e.event_type}</div>
+        </div>`).join('')}
+    </div>`;
+  }catch(e){
+    console.error('events error',e);
+    err($('events-wrap'),'Error loading events: '+e.message);
+  }
+}
+
+async function loadPortDetail(portName){
+  if(!portName || !CURRENT_SW) return;
+  const wrap = $('port-detail-wrap');
+  spin(wrap);
+  try{
+    // ✅ المسار الصحيح - بدون encodeURIComponent إضافي
+    const timelineUrl = `history/timeline/${CURRENT_SW.id}/${portName}/?hours=24`;
+    const diagnoseUrl = `history/diagnose/${CURRENT_SW.id}/${portName}/`;
+    
+    console.log("Fetching timeline from:", timelineUrl);
+    console.log("Fetching diagnose from:", diagnoseUrl);
+    
+    const [timeline, diagnoses] = await Promise.all([
+      API(timelineUrl).catch(e => ({error: e.message})),
+      API(diagnoseUrl).catch(e => ({error: e.message}))
+    ]);
+    
+    console.log("Timeline response:", timeline);
+    console.log("Diagnoses response:", diagnoses);
+    
+    if(timeline.error || diagnoses.error){
+      wrap.innerHTML = `<div class="empty-state" style="color:var(--danger)">Error loading data: ${timeline.error || diagnoses.error}</div>`;
+      return;
+    }
+    
+    let html = `<div class="cards-grid">
+      <div class="info-card"><div class="ic-label">Health Score</div><div class="health-badge health-${diagnoses.health>=70?'good':diagnoses.health>=40?'warning':'critical'}" style="width:auto;border-radius:8px;padding:5px 12px">${diagnoses.health || 0}%</div></div>
+      <div class="info-card"><div class="ic-label">Flaps (24h)</div><div class="ic-value" style="color:${diagnoses.counters?.flaps_24h>0?'var(--warn)':'var(--ok)'}">${diagnoses.counters?.flaps_24h || 0}</div></div>
+      <div class="info-card"><div class="ic-label">CRC Events</div><div class="ic-value" style="color:${diagnoses.counters?.crc_24h>0?'var(--danger)':'var(--ok)'}">${diagnoses.counters?.crc_24h || 0}</div></div>
+      <div class="info-card"><div class="ic-label">PoE Faults</div><div class="ic-value" style="color:${diagnoses.counters?.poe_faults_24h>0?'var(--danger)':'var(--ok)'}">${diagnoses.counters?.poe_faults_24h || 0}</div></div>
+    </div>`;
+    
+    if(diagnoses.diagnoses && diagnoses.diagnoses.length){
+      html+=`<div class="st" style="margin-top:12px">🔍 DIAGNOSIS & RECOMMENDATIONS</div>`;
+      html+=diagnoses.diagnoses.map(d=>`
+        <div class="issue-item ${d.severity}">
+          <div class="issue-sev ${d.severity}"></div>
+          <div class="issue-body">
+            <div class="issue-msg"><strong>${d.title}</strong><br>${d.detail}</div>
+            ${d.causes?.length?`<div class="issue-fix">▸ Causes: ${d.causes.join(', ')}</div>`:''}
+            ${d.fixes?.length?`<div class="issue-fix" style="color:var(--accent2)">→ ${d.fixes.join(' → ')}</div>`:''}
+          </div>
+        </div>`).join('');
+    }
+    
+    if(timeline.chart && timeline.chart.labels && timeline.chart.labels.length){
+      html+=`<div class="timeline-chart">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:8px">📈 ERROR TREND (24h)</div>
+        <canvas id="errorChart" height="150"></canvas>
+      </div>`;
+    }
+    
+    wrap.innerHTML = html;
+    
+    if(timeline.chart && timeline.chart.labels && timeline.chart.labels.length){
+      const ctx = document.getElementById('errorChart')?.getContext('2d');
+      if(ctx){
+        if(window._errorChart) window._errorChart.destroy();
+        window._errorChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: timeline.chart.labels,
+            datasets: [
+              {label: 'CRC Errors', data: timeline.chart.errors, borderColor: '#ff3860', backgroundColor: '#ff386018', fill: true, tension: 0.3},
+              {label: 'Drops', data: timeline.chart.drops, borderColor: '#ffb800', backgroundColor: '#ffb80018', fill: true, tension: 0.3},
+              {label: 'Traffic (Mbps)', data: timeline.chart.traffic, borderColor: '#00d4ff', backgroundColor: '#00d4ff18', fill: true, tension: 0.3, yAxisID: 'y1'}
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: true,
+            scales: {y: {title: {display: true, text: 'Errors', color: '#4a6a8a'}}, y1: {position: 'right', title: {display: true, text: 'Mbps', color: '#4a6a8a'}}},
+            plugins: {legend: {labels: {color: '#4a6a8a', font: {size: 9}}}}
+          }
+        });
+      }
+    }
+  }catch(e){
+    console.error('port detail error',e);
+    err(wrap,'Error loading port details: '+e.message);
+  }
+}
+</script>
+{% endblock %}

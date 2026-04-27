@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>تسجيل الدخول | NOC Monitor V1 - مركز العمليات الشبكية</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            font-family: 'Tajawal', sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ========== خلفية شبكات احترافية متحركة ========== */
+        .network-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 30%, #0a0f2c, #030613);
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        /* طبقة خطوط الشبكة (Grid) */
+        .grid-lines {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                repeating-linear-gradient(0deg, rgba(0, 180, 255, 0.08) 0px, rgba(0, 180, 255, 0.08) 1px, transparent 1px, transparent 80px),
+                repeating-linear-gradient(90deg, rgba(0, 180, 255, 0.08) 0px, rgba(0, 180, 255, 0.08) 1px, transparent 1px, transparent 80px);
+            pointer-events: none;
+        }
+
+        /* عقد الشبكة (nodes) */
+        .network-nodes {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .node {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #00e0ff;
+            border-radius: 50%;
+            box-shadow: 0 0 12px #00aaff;
+            animation: pulseNode 3s infinite ease-in-out;
+        }
+
+        /* خطوط ربط ديناميكية SVG */
+        .connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .connections line {
+            stroke: rgba(0, 200, 255, 0.25);
+            stroke-width: 1.2;
+            stroke-dasharray: 6 6;
+            animation: flowLine 8s linear infinite;
+        }
+
+        @keyframes flowLine {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: -24; }
+        }
+
+        @keyframes pulseNode {
+            0% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.8); box-shadow: 0 0 18px cyan; }
+            100% { opacity: 0.3; transform: scale(1); }
+        }
+
+        /* كرة أرضية شبكية خافتة */
+        .globe-ring {
+            position: absolute;
+            bottom: -10%;
+            right: -15%;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 212, 255, 0.15);
+            background: radial-gradient(circle, rgba(0,150,200,0.05) 0%, rgba(0,0,0,0) 70%);
+            filter: blur(20px);
+            animation: rotateGlobe 40s linear infinite;
+        }
+
+        @keyframes rotateGlobe {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* وحدات بيانات متحركة (packets) */
+        .data-packet {
+            position: absolute;
+            background: rgba(0, 212, 255, 0.6);
+            width: 6px;
+            height: 6px;
+            border-radius: 2px;
+            filter: blur(1px);
+            animation: flyPacket 12s linear infinite;
+        }
+
+        @keyframes flyPacket {
+            0% { transform: translate(0, 0) scale(0.8); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translate(300px, -200px) scale(1.2); opacity: 0; }
+        }
+
+        /* ========== كارت تسجيل الدخول المطور ========== */
+        .login-wrapper {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            backdrop-filter: blur(2px);
+        }
+
+        .glowing-card {
+            width: 100%;
+            max-width: 440px;
+            margin: 20px;
+            background: rgba(15, 25, 50, 0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 38px;
+            border: 1px solid rgba(0, 212, 255, 0.5);
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(0, 212, 255, 0.1), 0 0 0 5px rgba(0, 150, 255, 0.05);
+            transition: all 0.3s ease;
+            animation: borderGlow 3s infinite alternate;
+        }
+
+        @keyframes borderGlow {
+            0% {
+                box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(0, 180, 255, 0.3), 0 0 0 5px rgba(0, 212, 255, 0.1);
+                border-color: rgba(0, 212, 255, 0.4);
+            }
+            100% {
+                box-shadow: 0 30px 55px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(0, 212, 255, 0.7), 0 0 20px 8px rgba(0, 180, 255, 0.3);
+                border-color: rgba(0, 230, 255, 0.9);
+            }
+        }
+
+        .login-inner {
+            padding: 40px 32px 48px;
+            text-align: center;
+        }
+
+        /* شعار احترافي */
+        .logo-area {
+            margin-bottom: 20px;
+        }
+
+        .logo-icon {
+            font-size: 56px;
+            background: linear-gradient(135deg, #00d4ff, #0077ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            display: inline-block;
+            filter: drop-shadow(0 0 12px #00a6ff);
+        }
+
+        h2 {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff, #a0e9ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .sub {
+            color: #b0d4ff;
+            font-size: 14px;
+            margin-bottom: 30px;
+            border-bottom: 1px dashed rgba(0, 212, 255, 0.4);
+            display: inline-block;
+            padding-bottom: 5px;
+        }
+
+        /* تحسين رؤية المدخلات */
+        .input-group {
+            text-align: right;
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .input-group label {
+            display: block;
+            color: #eef5ff;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 15px;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group label i {
+            margin-left: 8px;
+            color: #00d4ff;
+        }
+
+        .input-field {
+            width: 100%;
+            background: rgba(10, 20, 45, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            border-radius: 18px;
+            padding: 14px 20px;
+            font-size: 16px;
+            color: white;
+            font-family: 'Tajawal', monospace;
+            transition: all 0.3s;
+            outline: none;
+            box-sizing: border-box;
+            font-weight: 500;
+        }
+
+        .input-field:focus {
+            border-color: #00e4ff;
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+            background: rgba(20, 35, 65, 0.9);
+        }
+
+        .input-field::placeholder {
+            color: rgba(200, 225, 255, 0.6);
+            font-size: 14px;
+        }
+
+        /* زر الدخول بتأثير تقني */
+        .login-btn {
+            width: 100%;
+            background: linear-gradient(95deg, #004ecc, #00a3cc);
+            border: none;
+            padding: 14px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 18px;
+            font-family: 'Tajawal', sans-serif;
+            color: white;
+            cursor: pointer;
+            transition: 0.25s;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            letter-spacing: 1px;
+            box-shadow: 0 5px 12px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-btn i {
+            font-size: 18px;
+        }
+
+        .login-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 18px #00a6ff;
+            background: linear-gradient(95deg, #0066ff, #00bbff);
+        }
+
+        .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* رسالة الخطأ محسنة */
+        .error-msg {
+            background: rgba(255, 71, 87, 0.2);
+            backdrop-filter: blur(10px);
+            border-right: 4px solid #ff4d4d;
+            padding: 12px 15px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #ffbbbb;
+            font-weight: 500;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        /* أيقونات إضافية أسفل الكارت */
+        .footer-note {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #8bb4ff;
+            border-top: 1px solid rgba(0, 212, 255, 0.2);
+            padding-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .footer-note span i {
+            margin-left: 5px;
+            font-size: 10px;
+        }
+
+        /* استجابة */
+        @media (max-width: 480px) {
+            .login-inner {
+                padding: 30px 22px;
+            }
+            .input-field {
+                padding: 12px 16px;
+            }
+            h2 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- خلفية الشبكات الاحترافية -->
+    <div class="network-bg">
+        <div class="grid-lines"></div>
+        <div class="globe-ring"></div>
+        <svg class="connections" xmlns="http://www.w3.org/2000/svg">
+            <!-- سيتم إضافة خطوط عشوائية بواسطة JS -->
+        </svg>
+        <div class="network-nodes" id="nodesContainer"></div>
+        <!-- حزم بيانات عائمة -->
+        <div id="packetsAnim"></div>
+    </div>
+
+    <div class="login-wrapper">
+        <div class="glowing-card">
+            <div class="login-inner">
+                <div class="logo-area">
+                    <i class="fas fa-network-wired logo-icon"></i>
+                </div>
+                <h2>NOC MONITOR</h2>
+                <div class="sub">مركز التحكم بالشبكات</div>
+
+                <!-- عرض الأخطاء إن وجدت (Django سيضيفها) -->
+                {% if form.errors %}
+                <div class="error-msg">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    خطأ في اسم المستخدم أو كلمة المرور
+                </div>
+                {% endif %}
+
+                <form method="post" action="" id="loginForm">
+                    {% csrf_token %}
+                    <div class="input-group">
+                        <label><i class="fas fa-user-astronaut"></i> اسم المستخدم</label>
+                        <input type="text" name="username" class="input-field" required placeholder="مثال: admin_NOC" value="{{ form.username.value|default:'' }}" autocomplete="off">
+                        {% if form.username.errors %}
+                            <div class="error-msg" style="margin-top:8px;">{{ form.username.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="input-group">
+                        <label><i class="fas fa-key"></i> كلمة المرور</label>
+                        <input type="password" name="password" class="input-field" required placeholder="••••••••">
+                        {% if form.password.errors %}
+                            <div class="error-msg" style="margin-top:8px;">{{ form.password.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="login-btn">
+                        <i class="fas fa-sign-in-alt"></i> دخول إلى النظام
+                    </button>
+                </form>
+                <div class="footer-note">
+                    <span><i class="fas fa-shield-alt"></i> شبكة آمنة</span>
+                    <span><i class="fas fa-chart-line"></i> مراقبة لحظية</span>
+                    <span><i class="fas fa-server"></i> NOC v3.0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // === خلفية شبكات ديناميكية: إنشاء عقد (Nodes) وخطوط ربط ===
+            const container = document.getElementById('nodesContainer');
+            const svgConnections = document.querySelector('.connections');
+            const nodesCount = 35;
+            let nodesArray = [];
+
+            // إنشاء العقد بشكل عشوائي مع إحداثيات نسبية مئوية
+            function randomRange(min, max) {
+                return min + Math.random() * (max - min);
+            }
+
+            for (let i = 0; i < nodesCount; i++) {
+                const node = document.createElement('div');
+                node.classList.add('node');
+                const left = randomRange(2, 98);
+                const top = randomRange(2, 95);
+                const delay = randomRange(0, 5);
+                node.style.left = left + '%';
+                node.style.top = top + '%';
+                node.style.animationDelay = delay + 's';
+                node.style.animationDuration = randomRange(2.5, 4.5) + 's';
+                node.style.width = randomRange(3, 7) + 'px';
+                node.style.height = node.style.width;
+                container.appendChild(node);
+                nodesArray.push({ x: left, y: top, element: node });
+            }
+
+            // إضافة خطوط ربط بين العقد المتقاربة (مسافة أقل من 25%)
+            function drawConnections() {
+                svgConnections.innerHTML = '';
+                for (let i = 0; i < nodesArray.length; i++) {
+                    for (let j = i + 1; j < nodesArray.length; j++) {
+                        const dx = Math.abs(nodesArray[i].x - nodesArray[j].x);
+                        const dy = Math.abs(nodesArray[i].y - nodesArray[j].y);
+                        const distance = Math.hypot(dx, dy);
+                        if (distance < 22) {   // 22% من عرض الشاشة
+                            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            const x1 = (nodesArray[i].x / 100) * window.innerWidth;
+                            const y1 = (nodesArray[i].y / 100) * window.innerHeight;
+                            const x2 = (nodesArray[j].x / 100) * window.innerWidth;
+                            const y2 = (nodesArray[j].y / 100) * window.innerHeight;
+                            line.setAttribute("x1", x1);
+                            line.setAttribute("y1", y1);
+                            line.setAttribute("x2", x2);
+                            line.setAttribute("y2", y2);
+                            svgConnections.appendChild(line);
+                        }
+                    }
+                }
+            }
+
+            // تحديث الخطوط عند تغيير حجم النافذة
+            window.addEventListener('resize', () => {
+                drawConnections();
+            });
+
+            // رسم أولي ثم كل 3 ثوانٍ تحديث ديناميكي للخطوط لإضافة حيوية (تتحرك العقد بلطف)
+            function refreshNetwork() {
+                drawConnections();
+            }
+            
+            // تحديث إحداثيات العقد بشكل خفيف لجعل الشبكة حية (حركة دورية بسيطة)
+            let time = 0;
+            function animateNodesMovement() {
+                time += 0.008;
+                nodesArray.forEach((node, idx) => {
+                    // حركة اهتزازية خفيفة جداً (+/- 0.8%) لإحساس بالحياة
+                    let offsetX = Math.sin(time + idx) * 0.6;
+                    let offsetY = Math.cos(time * 0.7 + idx) * 0.6;
+                    let baseLeft = parseFloat(node.element.style.left);
+                    let baseTop = parseFloat(node.element.style.top);
+                    if (!node.origLeft) {
+                        node.origLeft = baseLeft;
+                        node.origTop = baseTop;
+                    }
+                    let newLeft = node.origLeft + offsetX * 0.4;
+                    let newTop = node.origTop + offsetY * 0.4;
+                    newLeft = Math.min(97, Math.max(2, newLeft));
+                    newTop = Math.min(94, Math.max(2, newTop));
+                    node.element.style.left = newLeft + '%';
+                    node.element.style.top = newTop + '%';
+                    // تحديث الإحداثيات للخطوط
+                    nodesArray[idx].x = newLeft;
+                    nodesArray[idx].y = newTop;
+                });
+                drawConnections();
+                requestAnimationFrame(animateNodesMovement);
+            }
+
+            setTimeout(() => {
+                drawConnections();
+                animateNodesMovement();
+            }, 100);
+
+            // حزم بيانات متحركة عشوائية
+            const packetsArea = document.getElementById('packetsAnim');
+            function createPacket() {
+                const packet = document.createElement('div');
+                packet.classList.add('data-packet');
+                const startX = Math.random() * window.innerWidth;
+                const startY = Math.random() * window.innerHeight;
+                packet.style.left = startX + 'px';
+                packet.style.top = startY + 'px';
+                const duration = 6 + Math.random() * 8;
+                packet.style.animation = `flyPacket ${duration}s linear infinite`;
+                packet.style.animationDelay = Math.random() * 5 + 's';
+                packet.style.background = `rgba(0, ${150 + Math.random() * 105}, 255, 0.7)`;
+                packetsArea.appendChild(packet);
+                setTimeout(() => {
+                    if(packet && packet.remove) packet.remove();
+                }, duration * 1000);
+            }
+            setInterval(() => {
+                if(document.querySelectorAll('.data-packet').length < 25) createPacket();
+            }, 800);
+            for(let i=0;i<12;i++) setTimeout(createPacket, i*300);
+        })();
+
+        // أضافة تحسين للكتابة: إضافة تأثير بسيط عند التفاعل (اختياري)
+        // للتأكد من ظهور الخطأ إذا كان هناك أخطاء من الخلفية Django
+        // لكن لا نريد تعديل منطق الباكند، فقط واجهة أمامية محسنة
+        // كما يمكن إضافة فحص جافا سكريبت من طرف العميل للإحساس
+        document.addEventListener('DOMContentLoaded', function() {
+            // إذا كان هناك أي حقول فارغة ولم يتم إرسال يمكن اضافة تنبيه بسيط لكن ليس ضرورياً
+            const loginForm = document.getElementById('loginForm');
+            if(loginForm) {
+                loginForm.addEventListener('submit', function(e) {
+                    const username = loginForm.querySelector('input[name="username"]');
+                    const password = loginForm.querySelector('input[name="password"]');
+                    if(!username.value.trim() || !password.value) {
+                        e.preventDefault();
+                        let errorDiv = document.querySelector('.error-msg:not(.django-error)');
+                        if(!errorDiv) {
+                            const errBox = document.createElement('div');
+                            errBox.className = 'error-msg';
+                            errBox.innerHTML = '<i class="fas fa-info-circle"></i> يرجى إدخال اسم المستخدم وكلمة المرور';
+                            loginForm.insertBefore(errBox, loginForm.firstChild);
+                            setTimeout(() => { if(errBox) errBox.remove(); }, 3000);
+                        }
+                        return false;
+                    }
+                    return true;
+                });
+            }
+        });
+    </script>
+    <!-- توافق مع نظام django: يتم تمرير المتغيرات من نموذج authentication -->
+    <!-- Ensure that background network lines has incredible look & writing clarity improved -->
+    <!-- الكتابة الآن واضحة بفضل تباين الخلفية وظل النص وتحسين الإضاءة -->
+</body>
+</html>

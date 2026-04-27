@@ -265,16 +265,13 @@ body{background:var(--bg)}
       <div class="leg"><div class="dot" style="background:#111"></div>Disabled</div>
     </div>
   </div>
-
+ 
   <!-- AI Diagnosis -->
   <div class="sec">🤖 AI DIAGNOSIS</div>
   <div class="card" id="ai-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <div style="font-size:10px;color:var(--txt3);letter-spacing:1.5px">ROOT CAUSE</div>
-      <div id="ai-live-status" class="pill pill-info">API FALLBACK</div>
-    </div>
+    <div style="font-size:10px;color:var(--txt3);letter-spacing:1.5px">ROOT CAUSE</div>
     <div id="ai-root" style="font-size:14px;color:var(--green);margin-top:6px">
-      Loading diagnosis...
+      Connecting…
     </div>
     <div id="ai-iss" style="margin-top:9px;font-size:12px;color:#7ab0ce;line-height:2"></div>
     <div id="ai-recommend" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
@@ -611,8 +608,6 @@ let svgUpdateFrame = 0;
 const DATA_CACHE = {
   vlans: null,
 };
-let aiPanelsLoaded = false;
-let aiLastRefreshAt = 0;
 
 const DEFAULT_PORTS = Array.from({length:48}, (_, idx) => ({
   port: idx + 1,
@@ -866,105 +861,6 @@ function updateInterfaceSummaryStats(list) {
 function updatePoeSummaryStats(poeData) {
   document.getElementById("sc-poe").textContent = `${poeData.consumed_w||0}W`;
   document.getElementById("sc-poe-sub").textContent = `of ${poeData.total_w||0}W budget`;
-}
-
-function aiSeverityColor(level) {
-  return level === "critical" ? "#ff3860"
-    : level === "warning" ? "#ffb800"
-    : level === "info" ? "#00d4ff"
-    : "#00ff9d";
-}
-
-function aiSeverityPill(level) {
-  return level === "critical" ? "pill-err"
-    : level === "warning" ? "pill-wrn"
-    : level === "info" ? "pill-info"
-    : "pill-up";
-}
-
-function renderAiLiveStatus(mode, text) {
-  const el = document.getElementById("ai-live-status");
-  if (!el) return;
-  el.className = `pill ${mode === "live" ? "pill-up" : mode === "retry" ? "pill-wrn" : "pill-info"}`;
-  el.textContent = text;
-}
-
-function renderAiDiagnosisCard(data, sourceMode="api") {
-  const rootEl = document.getElementById("ai-root");
-  const issuesEl = document.getElementById("ai-iss");
-  const recEl = document.getElementById("ai-recommend");
-  const severity = data?.severity || "good";
-  const rootCause = data?.root_cause || "لا توجد مؤشرات قوية على عطل فعلي حالياً";
-  const issues = data?.issues || [];
-  const recommendations = data?.recommendations || [];
-
-  rootEl.style.color = aiSeverityColor(severity);
-  rootEl.textContent = rootCause;
-  issuesEl.innerHTML = issues.length
-    ? issues.map(issue => {
-        const issueSeverity = issue.severity || issue.type || "info";
-        return `<div><span class="pill ${aiSeverityPill(issueSeverity)}">${escapeHtml(issue.type || issueSeverity)}</span> <span style="margin-left:6px">${escapeHtml(issue.msg || "")}</span></div>`;
-      }).join("")
-    : `<div style="color:var(--green)">✅ لا توجد مؤشرات أعطال حرجة حالياً</div>`;
-  recEl.innerHTML = recommendations.length
-    ? recommendations.map(item => `💡 ${escapeHtml(item)}`).join("<br>")
-    : `💡 استمر في المراقبة الدورية ولا توجد خطوات عاجلة مطلوبة`;
-
-  renderAiLiveStatus(
-    sourceMode,
-    sourceMode === "live" ? "LIVE UPDATES" : sourceMode === "retry" ? "RECONNECTING" : "API FALLBACK"
-  );
-}
-
-function renderNetworkIssuesCard(items=[]) {
-  const issuesCard = document.getElementById("issues-card");
-  if (!items.length) {
-    issuesCard.innerHTML = `<div style="color:var(--green)">✅ No duplex or loop issues detected</div>`;
-    return;
-  }
-  issuesCard.innerHTML = items.map(item => `
-    <div class="pred-card" style="border-left:3px solid ${aiSeverityColor(item.severity)}">
-      <div class="pred-title">${escapeHtml(item.title || "Issue")}</div>
-      <div class="pred-value">${escapeHtml(item.message || "—")}</div>
-      <div class="pred-action">🔧 ${escapeHtml(item.action || "راقب الحالة")}</div>
-    </div>
-  `).join("");
-}
-
-function renderPredictionSummaryCard(items=[]) {
-  const predCard = document.getElementById("pred-summary-card");
-  if (!items.length) {
-    predCard.innerHTML = `<div style="color:var(--txt3);font-size:12px">No prediction data available</div>`;
-    return;
-  }
-  predCard.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
-      ${items.map(item => `
-        <div class="pred-card" style="margin-bottom:0">
-          <div class="pred-title">${escapeHtml(item.title || "Prediction")}</div>
-          <div class="pred-value" style="color:${aiSeverityColor(item.severity)}">${escapeHtml(item.message || "—")}</div>
-        </div>
-      `).join("")}
-    </div>
-  `;
-}
-
-async function loadAiDiagnosis(force=false) {
-  if (!force && aiPanelsLoaded && (Date.now() - aiLastRefreshAt) < 15000) return;
-  try {
-    const r = await fetch(API("ai-diagnosis"));
-    const d = await r.json();
-    renderAiDiagnosisCard(d, "api");
-    renderNetworkIssuesCard(d.network_issues || []);
-    renderPredictionSummaryCard(d.prediction_items || []);
-    aiPanelsLoaded = true;
-    aiLastRefreshAt = Date.now();
-  } catch (e) {
-    document.getElementById("ai-root").style.color = "#ffb800";
-    document.getElementById("ai-root").textContent = "تعذر تحديث التشخيص حالياً";
-    document.getElementById("ai-iss").innerHTML = `<div style="color:var(--amber)">سيستمر عرض آخر بيانات متاحة بمجرد نجاح الاتصال أو الـ API.</div>`;
-    renderAiLiveStatus("api", "API FALLBACK");
-  }
 }
 
 function updateMacPortSuggestions() {
@@ -1535,7 +1431,7 @@ async function loadHealthReport(){
 function connectWebSocket(){
   const proto=location.protocol==="https:"?"wss":"ws";
   const ws=new WebSocket(`${proto}://${location.host}/ws/network/`);
-  ws.onopen=()=>{renderAiLiveStatus("live","LIVE UPDATES");};
+  ws.onopen=()=>{document.getElementById("ai-root").textContent="Connected — waiting for data…";};
   ws.onmessage=e=>{
     let payload;
     try{payload=JSON.parse(e.data);}catch{return;}
@@ -1546,21 +1442,27 @@ function connectWebSocket(){
     ALL_PORTS=sw.all_ports||[];
     ALL_VLANS=sw.vlans||[];
     scheduleSVGUpdate(ALL_PORTS);
-    if (sw.ai) {
-      renderAiDiagnosisCard(sw.ai, "live");
+    document.getElementById("ai-root").textContent=(sw.ai&&sw.ai.root_cause)||"لا يوجد مشاكل";
+    document.getElementById("ai-iss").innerHTML=((sw.ai&&sw.ai.issues)||[]).map(i=>`• ${i.msg}`).join("<br>");
+    document.getElementById("ai-recommend").innerHTML=((sw.ai&&sw.ai.recommendations)||[]).slice(0,3).map(r=>`💡 ${r}`).join("<br>");
+    
+    const duplexIssues=sw.duplex_issues||{};
+    const loops=sw.loops||{};
+    const issuesCard=document.getElementById("issues-card");
+    if(duplexIssues.has_mismatch || loops.has_loop){
+      issuesCard.innerHTML=`<div style="display:grid;gap:8px">${duplexIssues.has_mismatch?`<div style="color:var(--amber)">⚠️ Duplex Mismatch: ${duplexIssues.count} port(s) in half-duplex</div>`:""}${loops.has_loop?`<div style="color:var(--red)">🔄 Loop detected: ${loops.loop_count} potential loop(s)</div>`:""}${duplexIssues.mismatches?.slice(0,2).map(m=>`<div style="font-size:11px;color:var(--txt3)}">• ${m.port}: ${m.fix}</div>`).join("")||""}</div>`;
+    } else {
+      issuesCard.innerHTML=`<div style="color:var(--green)">✅ No duplex or loop issues detected</div>`;
     }
+    
+    const pred=sw.predictions||{};
+    const predCard=document.getElementById("pred-summary-card");
+    predCard.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px"><div><div class="risk-${pred.cable?.status==="critical"?"critical":pred.cable?.status==="warning"?"warning":"good"}"></div>Cable: ${pred.cable?.message||"—"}</div><div><div class="risk-${pred.cpu?.status==="critical"?"critical":pred.cpu?.status==="warning"?"warning":"good"}"></div>CPU: ${pred.cpu?.message||"—"}</div><div><div class="risk-${pred.broadcast?.has_storm_risk?"critical":"good"}"></div>Storm Risk: ${pred.broadcast?.has_storm_risk?"⚠️ Yes":"✅ No"}</div></div>`;
     
     if(document.getElementById("panel-vlans").classList.contains("active")) renderVlans();
   };
-  ws.onerror=()=>{
-    renderAiLiveStatus("retry","RECONNECTING");
-    loadAiDiagnosis(true);
-  };
-  ws.onclose=()=>{
-    renderAiLiveStatus("api","API FALLBACK");
-    loadAiDiagnosis(true);
-    setTimeout(connectWebSocket,4000);
-  };
+  ws.onerror=()=>{document.getElementById("ai-root").textContent="WebSocket error — retrying…";};
+  ws.onclose=()=>{setTimeout(connectWebSocket,4000);};
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1586,7 +1488,6 @@ async function refreshAllData(){
   await loadIpBrief();
   await loadTdr();
   await loadPredictions();
-  await loadAiDiagnosis(true);
   await loadHealthReport();
 }
 
@@ -1596,7 +1497,6 @@ async function refreshAllData(){
 initializeSwitchSVG();
 bootstrapSwitchPanel().finally(connectWebSocket);
 loadSystem();
-loadAiDiagnosis(true);
 
 </script>
 

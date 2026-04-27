@@ -1,25 +1,138 @@
-from django.shortcuts import render
+# core/views.py
+"""
+Views for Cisco NMS Django Application
+═══════════════════════════════════════════════════════════════
+يحتوي على:
+  1. Page Views (الصفحات الرئيسية)
+  2. Dashboard APIs
+  3. Discovery APIs
+  4. Network Map APIs
+  5. Switch Inspector APIs (لصفحة تفاصيل السويتش)
+  6. Switch Inspector APIs (لصفحة MAC Tracker)
+  7. Port History APIs (للجدول الزمني وتشخيص المنافذ)
+  8. AI & Predictive APIs
+  9. Port Flapping APIs
+═══════════════════════════════════════════════════════════════
+"""
+
+# ============================================================
+# 1. Imports (منظمة)
+# ============================================================
+import json
+import logging
+import random
+import subprocess
+import platform
+from functools import wraps
+from datetime import timedelta
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.core.cache import cache
+from django.views.decorators.cache import cache_page
+from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.db.models import Count, Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import Switch, Interface, Location
-from .services.auto_discovery import discover_network
-from .services.smart_discovery import smart_discovery
-from .services.topology_discovery import generate_topology
+# Models
+from core.models import Switch, Interface, Location
+
+# Services - Discovery
+from core.services.auto_discovery import discover_network
+from core.services.smart_discovery import smart_discovery
+from core.services.topology_discovery import generate_topology, build_topology
+
+# Services - Monitoring & Inspector
+from core.services.switch_inspector import (
+    get_system_info,
+    get_interfaces_detail,
+    get_error_analysis,
+    get_cdp_neighbors,
+    get_poe_detail,
+    get_port_security,
+    get_mac_table,
+    get_ip_interfaces,
+    get_tdr_results,
+    get_vlans_full,
+    get_environment,
+    get_stp_info,
+)
+from core.services.monitoring import get_vlans, get_ports_status
+
+# Services - Predictive & AI
+from core.services.predictive import (
+    estimate_cable_length,
+    detect_network_loops,
+    check_stp_consistency,
+    FailurePredictor,
+    detect_duplex_mismatch,
+)
+from core.services.predictive_ai import predict_cpu_crash
+
+# Services - Port History
+from core.services.port_history import (
+    get_port_timeline,
+    get_switch_events,
+    get_flap_report,
+    get_port_diagnostics,
+    get_all_ports_health,
+    get_anomaly_report,
+    get_error_trend,
+    get_traffic_baseline,
+)
+
+# Services - SNMP
+from core.services.snmp import clear_cache, snmp_walk_with_index
+
+logger = logging.getLogger(__name__)
 
 
-# ----------------------------
-# Web Pages
-# ----------------------------
+# ============================================================
+# 2. Helpers & Decorators
+# ============================================================
+
+def api_cache(timeout=30):
+    """
+    ديكوراتور للتخزين المؤقت لواجهات API
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            cache_key = f"api:{request.path}:{request.GET.urlencode()}:{kwargs.get('hostname', '')}"
+            cached_response = cache.get(cache_key)
+            if cached_response:
+                return cached_response
+            response = view_func(request, *args, **kwargs)
+            if response.status_code == 200:
+                cache.set(cache_key, response, timeout)
+            return response
+        return wrapper
+    return decorator
 
 
-from django.db.models import Count
+def _json(data, status=200):
+    """إرجاع JSON response"""
+    return JsonResponse(data, status=status, safe=False)
 
-from django.shortcuts import render, get_object_or_404
-from django.db.models import Count
-from core.models import Location, Switch
- 
- 
+
+def _get_switch_by_hostname(hostname):
+    """جلب السويتش بواسطة hostname"""
+    return get_object_or_404(Switch, hostname=hostname)
+
+
+def _get_switch_by_id(switch_id):
+    """جلب السويتش بواسطة ID"""
+    return get_object_or_404(Switch, id=switch_id)
+
+
+# ============================================================
+# 3. Page Views (الصفحات الرئيسية)
+# ============================================================
+
+@login_required
 def dashboard_page(request):
     """
     الصفحة الرئيسية — تعرض كروت المواقع فقط.
@@ -28,16 +141,18 @@ def dashboard_page(request):
     locations = Location.objects.annotate(
         total_switches=Count("switch")
     ).order_by("name")
- 
+    
     return render(request, "dashboard/dashboard.html", {
         "locations": locations,
     })
- 
- 
+
+
+@login_required
 def location_switches_page(request, location_id):
-    from django.core.serializers import serialize
-    import json
-    
+    """
+    صفحة سويتشات مكان واحد.
+    تمرر الـ location_id للـ template حتى يفلتر WS feed.
+    """
     location = get_object_or_404(Location, id=location_id)
     switches = Switch.objects.filter(location=location).order_by("hostname")
     
@@ -53,35 +168,66 @@ def location_switches_page(request, location_id):
     return render(request, "dashboard/location_switches.html", {
         "location": location,
         "switches": switches,
-        "switches_data": json.dumps(switches_data),  # ← أضف هذا
+        "switches_data": json.dumps(switches_data),
     })
 
 
-
+@login_required
 def switches_page(request):
-
+    """صفحة عرض جميع السويتشات"""
     switches = Switch.objects.all()
-
     return render(request, "dashboard/switches.html", {
         "switches": switches
     })
 
 
+@login_required
 def topology_page(request):
-
+    """صفحة التوبولوجيا"""
     return render(request, "dashboard/topology.html")
 
 
-# ----------------------------
-# API
-# ----------------------------
+@login_required
+def discovery_page(request):
+    """صفحة اكتشاف الأجهزة"""
+    return render(request, "dashboard/discovery.html")
+
+
+@login_required
+def switch_details(request, hostname):
+    """صفحة تفاصيل سويتش واحد (FULL DETAILS)"""
+    sw = get_object_or_404(Switch, hostname=hostname)
+    return render(request, "dashboard/switch_details.html", {
+        "switch": sw
+    })
+
+
+@login_required
+def mac_tracker_page(request):
+    """صفحة MAC Tracker الرئيسية"""
+    switches = Switch.objects.select_related("location").order_by("location__name", "hostname")
+    locations = Location.objects.order_by("name")
+    return render(request, "dashboard/mac_tracker.html", {
+        "switches": switches,
+        "locations": locations,
+    })
+
+
+@login_required
+def port_flapping_page(request):
+    """صفحة مراقبة تقلب المنافذ (Port Flapping)"""
+    return render(request, "dashboard/port_flapping.html")
+
+
+# ============================================================
+# 4. Dashboard & Topology APIs
+# ============================================================
 
 @api_view(["GET"])
 def dashboard_api(request):
-
+    """API للإحصائيات العامة للداشبورد"""
     switches = Switch.objects.count()
     interfaces = Interface.objects.count()
-
     return Response({
         "switches": switches,
         "interfaces": interfaces
@@ -90,57 +236,109 @@ def dashboard_api(request):
 
 @api_view(["GET"])
 def topology_api(request):
-
+    """API لإنشاء صورة التوبولوجيا"""
     switches = Switch.objects.all()
-
     path = generate_topology(switches)
-
     return Response({
         "topology_image": path
     })
 
 
-# core/views.py
-from django.shortcuts import render
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from core.services.auto_discovery import discover_network
-from core.services.smart_discovery import smart_discovery
-import logging
+@api_view(["GET"])
+def network_map_api(request):
+    """
+    API لخريطة الشبكة (Nodes + Links)
+    مع cache لمدة 30 ثانية
+    """
+    cached = cache.get("network_map")
+    if cached:
+        return Response(cached)
 
-logger = logging.getLogger(__name__)
+    switches = Switch.objects.all()
 
-def discovery_page(request):
-    return render(request, "dashboard/discovery.html")
+    nodes = []
+    links = []
+    node_ids = set()
 
-import logging
-logger = logging.getLogger(__name__)
+    # بناء العقد (Nodes)
+    for sw in switches:
+        status = "online"
+        try:
+            vlans = get_vlans(sw.ip_address, sw.snmp_community)
+            vlan_ids = [v["vlan_id"] for v in vlans]
+        except:
+            vlan_ids = []
+
+        nodes.append({
+            "id": sw.hostname,
+            "ip": sw.ip_address,
+            "status": status,
+            "vlans": vlan_ids
+        })
+        node_ids.add(sw.hostname)
+
+    # بناء الروابط (Links)
+    link_set = set()
+    for sw in switches:
+        topo = build_topology([sw])
+        for link in topo:
+            src = link["source"]
+            dst = link["target"]
+            if dst not in node_ids:
+                continue
+            key = tuple(sorted([src, dst]))
+            if key not in link_set:
+                links.append({
+                    "source": src,
+                    "target": dst,
+                    "traffic": random.randint(10, 100)
+                })
+                link_set.add(key)
+
+    # Fallback إذا لم توجد روابط
+    if not links and len(nodes) > 1:
+        for i in range(len(nodes) - 1):
+            links.append({
+                "source": nodes[i]["id"],
+                "target": nodes[i+1]["id"],
+                "traffic": random.randint(10, 100)
+            })
+
+    data = {"nodes": nodes, "links": links}
+    cache.set("network_map", data, timeout=30)
+    return Response(data)
+
+
+@api_view(["GET"])
+def switch_ports_api(request, ip):
+    """API لجلب حالة منافذ سويتش معين"""
+    ports = get_ports_status(ip, "public")
+    return Response(ports)
+
+
+# ============================================================
+# 5. Discovery APIs
+# ============================================================
 
 @api_view(["GET", "POST"])
 def auto_discovery_api(request):
     """
-    يسكان ويحفظ في DB.
+    يسكان الشبكة ويحفظ الأجهزة المكتشفة في قاعدة البيانات.
     POST body:
         network           : "192.168.70.0/24"
         community         : "private"
-        extra_communities : ["public", "cisco"]   ← اختياري
+        extra_communities : ["public", "cisco"]
     """
-    from core.services.auto_discovery import discover_network
-
     if request.method == "POST":
-        network           = request.data.get("network",   "192.168.70.0/24")
-        community         = request.data.get("community", "private")
+        network = request.data.get("network", "192.168.70.0/24")
+        community = request.data.get("community", "private")
         extra_communities = request.data.get("extra_communities", [])
     else:
-        network           = request.GET.get("network",   "192.168.70.0/24")
-        community         = request.GET.get("community", "private")
+        network = request.GET.get("network", "192.168.70.0/24")
+        community = request.GET.get("community", "private")
         extra_communities = request.GET.getlist("extra_communities", [])
 
-    logger.info(
-        f"[Discovery] network={network} "
-        f"community={community} "
-        f"extras={extra_communities}"
-    )
+    logger.info(f"[Discovery] network={network} community={community} extras={extra_communities}")
 
     result = discover_network(
         network,
@@ -158,468 +356,206 @@ def smart_discovery_api(request):
     Smart discovery من seed IP.
     يُجرب communities متعددة تلقائياً.
     """
-    from core.services.smart_discovery import smart_discovery
-
     if request.method == "POST":
-        seed_ip           = request.data.get("seed_ip",   "192.168.70.1")
-        community         = request.data.get("community", "private")
+        seed_ip = request.data.get("seed_ip", "192.168.70.1")
+        community = request.data.get("community", "private")
         extra_communities = request.data.get("extra_communities", [])
     else:
-        seed_ip           = request.GET.get("seed_ip",   "192.168.70.1")
-        community         = request.GET.get("community", "private")
+        seed_ip = request.GET.get("seed_ip", "192.168.70.1")
+        community = request.GET.get("community", "private")
         extra_communities = request.GET.getlist("extra_communities", [])
 
     result = smart_discovery(seed_ip, community)
     return Response({"discovered": result})
 
-    
-from .services.monitoring import get_interfaces
-from .services.packet_loss import check_packet_loss
-from .services.topology_discovery import build_topology
 
-
-from django.core.cache import cache
-
-from django.core.cache import cache
-import random
-
-import random
-from django.db.models import Count
-
-from django.core.cache import cache
-import random
-
-from django.core.cache import cache
-import random
-from .services.monitoring import get_vlans
-from .services.topology_discovery import build_topology
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Switch
-
-
-@api_view(["GET"])
-def network_map_api(request):
-
-    # 🔥 cache لمدة 30 ثانية
-    cached = cache.get("network_map")
-    if cached:
-        return Response(cached)
-
-    switches = Switch.objects.all()
-
-    nodes = []
-    links = []
-    node_ids = set()
-
-    # -------------------------
-    # Nodes
-    # -------------------------
-    for sw in switches:
-
-        status = "online"
-
-        # 🔥 VLANs
-        try:
-            vlans = get_vlans(sw.ip_address, sw.snmp_community)
-            vlan_ids = [v["vlan_id"] for v in vlans]
-        except:
-            vlan_ids = []
-
-        nodes.append({
-            "id": sw.hostname,
-            "ip": sw.ip_address,
-            "status": status,
-            "vlans": vlan_ids   # ✅ الجديد
-        })
-
-        node_ids.add(sw.hostname)
-
-    # -------------------------
-    # Links
-    # -------------------------
-    link_set = set()
-
-    for sw in switches:
-
-        topo = build_topology([sw])
-
-        for link in topo:
-
-            src = link["source"]
-            dst = link["target"]
-
-            # ❌ تجاهل أي جهاز ليس Switch
-            if dst not in node_ids:
-                continue
-
-            key = tuple(sorted([src, dst]))
-
-            if key not in link_set:
-                links.append({
-                    "source": src,
-                    "target": dst,
-                    "traffic": random.randint(10, 100)
-                })
-                link_set.add(key)
-
-    # fallback
-    if not links and len(nodes) > 1:
-        for i in range(len(nodes) - 1):
-            links.append({
-                "source": nodes[i]["id"],
-                "target": nodes[i+1]["id"],
-                "traffic": random.randint(10, 100)
-            })
-
-    data = {"nodes": nodes, "links": links}
-
-    cache.set("network_map", data, timeout=30)
-
-    return Response(data)
-    
-from .services.predictive_ai import predict_cpu_crash
+# ============================================================
+# 6. AI & Predictive APIs
+# ============================================================
 
 @api_view(["GET"])
 def ai_insights(request):
-
+    """API للتنبؤات الذكية باستخدام AI"""
     cpu_data = [20, 40, 60, 85, 90]
-
     result = predict_cpu_crash(cpu_data)
-
     return Response({
         "ai": result
-    }) 
-
-from .services.monitoring import get_ports_status
-
-@api_view(["GET"])
-def switch_ports_api(request, ip):
-
-    ports = get_ports_status(ip, "public")
-
-    return Response(ports)
-
-
-from django.shortcuts import render, get_object_or_404
-from core.models import Switch
-
-def switch_details(request, hostname):
-    sw = get_object_or_404(Switch, hostname=hostname)
-
-    return render(request, "dashboard/switch_details.html", {
-        "switch": sw
     })
 
 
-
-
-# ══════════════════════════════════════════════════════════════
-#  Switch Inspector API Views
-#  كل دالة تُرجع JSON مباشرة للـ AJAX calls في صفحة التفاصيل
-# ══════════════════════════════════════════════════════════════
-from django.http import JsonResponse
-from django.shortcuts import render, get_object_or_404
-
-# core/views.py - النسخة الكاملة مع جميع الإضافات
-
-import json
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
-from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_headers
-from django.core.cache import cache
-from functools import wraps
-
-from core.services.switch_inspector import (
-    get_system_info,
-    get_interfaces_detail,
-    get_error_analysis,
-    get_cdp_neighbors,
-    get_poe_detail,
-    get_port_security,
-    get_mac_table,
-    get_ip_interfaces,
-    get_tdr_results,
-    get_vlans_full,
-    get_environment,
-    get_stp_info,
-)
-from core.services.predictive import (
-    estimate_cable_length,
-    detect_network_loops,
-    check_stp_consistency,
-    FailurePredictor,
-    detect_duplex_mismatch,
-)
-from core.services.ai_engine import build_ai_diagnosis
-from core.services.snmp import clear_cache
-
-# core/views.py - أضف هذه الدالة
-
-def api_switch_vlans_debug(request, hostname):
-    """
-    API لاختبار VLANات وعرض البيانات الخام للتشخيص
-    """
-    from core.models import Switch
-    from core.services.switch_inspector import get_vlans_full
-    from core.services.monitoring import get_vlans
-    
-    sw = get_object_or_404(Switch, hostname=hostname)
-    
-    result = {
-        "switch": sw.hostname,
-        "ip": sw.ip_address,
-    }
-    
-    # جلب VLANات من switch_inspector
-    try:
-        vlans_full = get_vlans_full(sw.ip_address, sw.snmp_community)
-        result["vlans_full"] = vlans_full
-        result["vlans_full_count"] = len(vlans_full)
-    except Exception as e:
-        result["vlans_full_error"] = str(e)
-        result["vlans_full"] = []
-    
-    # جلب VLANات من monitoring
-    try:
-        vlans_mon = get_vlans(sw.ip_address, sw.snmp_community)
-        result["vlans_monitoring"] = vlans_mon
-        result["vlans_monitoring_count"] = len(vlans_mon)
-    except Exception as e:
-        result["vlans_monitoring_error"] = str(e)
-        result["vlans_monitoring"] = []
-    
-    # جلب أسماء المنافذ
-    try:
-        from core.services.switch_inspector import _get_if_names
-        if_names = _get_if_names(sw.ip_address, sw.snmp_community)
-        result["if_names"] = if_names[:20]  # أول 20 منفذ
-    except Exception as e:
-        result["if_names_error"] = str(e)
-    
-    # اختبار OID_PORTMAP مباشرة
-    try:
-        from core.services.snmp import snmp_walk_with_index
-        portmap_raw = snmp_walk_with_index(sw.ip_address, sw.snmp_community, "1.3.6.1.4.1.9.9.68.1.2.2.1.2")
-        result["portmap_raw"] = portmap_raw[:20]  # أول 20 نتيجة
-    except Exception as e:
-        result["portmap_raw_error"] = str(e)
-    
-    return JsonResponse(result)
-# ============================================
-# Decorator للتخزين المؤقت في Django
-# ============================================
-def api_cache(timeout=30):
-    """
-    ديكوراتور للتخزين المؤقت لواجهات API
-    """
-    def decorator(view_func):
-        @wraps(view_func)
-        def wrapper(request, *args, **kwargs):
-            # بناء مفتاح فريد لكل طلب
-            cache_key = f"api:{request.path}:{request.GET.urlencode()}:{kwargs.get('hostname', '')}"
-            
-            # محاولة القراءة من cache
-            cached_response = cache.get(cache_key)
-            if cached_response:
-                return cached_response
-            
-            # تنفيذ الـ view
-            response = view_func(request, *args, **kwargs)
-            
-            # تخزين النتيجة في cache
-            if response.status_code == 200:
-                cache.set(cache_key, response, timeout)
-            
-            return response
-        return wrapper
-    return decorator
-
-
-def _sw(hostname):
-    from core.models import Switch
-    return get_object_or_404(Switch, hostname=hostname)
-
-
-def switch_details(request, hostname):
-    from core.models import Switch
-    sw = get_object_or_404(Switch, hostname=hostname)
-    return render(request, "dashboard/switch_details.html", {"switch": sw})
-
-
-# ============================================
-# APIs الأساسية
-# ============================================
+# ============================================================
+# 7. Switch Inspector APIs (لصفحة تفاصيل السويتش)
+# ============================================================
 
 @api_cache(timeout=30)
 def api_switch_system(request, hostname):
-    sw = _sw(hostname)
+    """API لمعلومات النظام الأساسية للسويتش"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_system_info(sw.ip_address, sw.snmp_community)
+        data = get_system_info(sw.ip_address, sw.snmp_community)
     except Exception as e:
-        d = {"error": str(e)}
-    return JsonResponse(d)
+        data = {"error": str(e)}
+    return JsonResponse(data)
 
 
 @api_cache(timeout=30)
 def api_switch_interfaces(request, hostname):
-    sw = _sw(hostname)
-    f = request.GET.get("status", "all")
+    """API لجلب تفاصيل المنافذ (Interfaces)"""
+    sw = _get_switch_by_hostname(hostname)
+    status_filter = request.GET.get("status", "all")
     try:
         ifaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
-        if f == "connected":
+        if status_filter == "connected":
             ifaces = [i for i in ifaces if i["status"] == "connected"]
-        elif f == "notconnect":
+        elif status_filter == "notconnect":
             ifaces = [i for i in ifaces if i["status"] == "notconnect"]
-        elif f == "disabled":
+        elif status_filter == "disabled":
             ifaces = [i for i in ifaces if i["status"] == "disabled"]
-        elif f == "err":
+        elif status_filter == "err":
             ifaces = [i for i in ifaces if i["has_errors"]]
-    except Exception as e:
+    except Exception:
         ifaces = []
     return JsonResponse({"interfaces": ifaces})
 
 
 @api_cache(timeout=30)
 def api_switch_errors(request, hostname):
-    sw = _sw(hostname)
+    """API لتحليل أخطاء المنافذ"""
+    sw = _get_switch_by_hostname(hostname)
     try:
         ifaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
         errors = get_error_analysis(ifaces)
-    except Exception as e:
+    except Exception:
         errors = []
     return JsonResponse({"errors": errors})
 
 
 @api_cache(timeout=60)
 def api_switch_cdp(request, hostname):
-    sw = _sw(hostname)
+    """API لجيران CDP"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_cdp_neighbors(sw.ip_address, sw.snmp_community)
-    except:
-        d = []
-    return JsonResponse({"neighbors": d})
+        data = get_cdp_neighbors(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = []
+    return JsonResponse({"neighbors": data})
 
 
 @api_cache(timeout=30)
 def api_switch_poe(request, hostname):
-    sw = _sw(hostname)
+    """API لمعلومات PoE"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_poe_detail(sw.ip_address, sw.snmp_community)
-    except:
-        d = {"ports": [], "total_w": 0, "consumed_w": 0, "available_w": 0, "faulty": []}
-    return JsonResponse(d)
+        data = get_poe_detail(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = {"ports": [], "total_w": 0, "consumed_w": 0, "available_w": 0, "faulty": []}
+    return JsonResponse(data)
 
 
 @api_cache(timeout=60)
 def api_switch_portsec(request, hostname):
-    sw = _sw(hostname)
+    """API لمعلومات Port Security"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_port_security(sw.ip_address, sw.snmp_community)
-    except:
-        d = {"enabled": False, "ports": [], "enabled_count": 0}
-    return JsonResponse(d)
+        data = get_port_security(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = {"enabled": False, "ports": [], "enabled_count": 0}
+    return JsonResponse(data)
 
 
 @api_cache(timeout=30)
 def api_switch_mac(request, hostname):
-    sw      = _sw(hostname)
-    port    = request.GET.get("port", "").strip()
-    page    = max(0, int(request.GET.get("page", "0")))
-    limit   = min(500, max(10, int(request.GET.get("limit", "200"))))
-    show_all= request.GET.get("all", "0") == "1"
+    """API لجدول MAC addresses"""
+    sw = _get_switch_by_hostname(hostname)
+    port = request.GET.get("port", "").strip()
+    page = max(0, int(request.GET.get("page", "0")))
+    limit = min(500, max(10, int(request.GET.get("limit", "200"))))
+    show_all = request.GET.get("all", "0") == "1"
 
     try:
         if show_all:
             limit = 5000
-        d = get_mac_table(
+        data = get_mac_table(
             sw.ip_address,
             sw.snmp_community,
             limit=limit,
             offset_n=page * limit,
         )
-        # فلتر بالمنفذ
         if port:
-            d["mac_table"] = [
-                m for m in d["mac_table"]
+            data["mac_table"] = [
+                m for m in data["mac_table"]
                 if port.lower() in m["port"].lower()
             ]
-            d["filtered_total"] = len(d["mac_table"])
+            data["filtered_total"] = len(data["mac_table"])
     except Exception as e:
-        d = {"mac_table": [], "total": 0,
-             "offset": 0, "limit": limit, "error": str(e)}
+        data = {"mac_table": [], "total": 0, "offset": 0, "limit": limit, "error": str(e)}
 
-    return JsonResponse(d)
+    return JsonResponse(data)
 
 
 @api_cache(timeout=60)
 def api_switch_ipbrief(request, hostname):
-    sw = _sw(hostname)
+    """API لـ IP Interface Brief"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_ip_interfaces(sw.ip_address, sw.snmp_community)
-    except:
-        d = []
-    return JsonResponse({"ip_interfaces": d})
+        data = get_ip_interfaces(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = []
+    return JsonResponse({"ip_interfaces": data})
 
 
 @api_cache(timeout=120)
 def api_switch_tdr(request, hostname):
-    sw = _sw(hostname)
+    """API لنتائج TDR (اختبار الكابلات)"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_tdr_results(sw.ip_address, sw.snmp_community)
-    except:
-        d = []
-    return JsonResponse({"tdr": d})
+        data = get_tdr_results(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = []
+    return JsonResponse({"tdr": data})
 
 
 @api_cache(timeout=60)
 def api_switch_vlans(request, hostname):
-    sw = _sw(hostname)
+    """API لـ VLANs"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_vlans_full(sw.ip_address, sw.snmp_community)
-        d = [v for v in d if v["port_count"] > 0 or v["active"]]
-    except:
-        d = []
-    return JsonResponse({"vlans": d})
+        data = get_vlans_full(sw.ip_address, sw.snmp_community)
+        data = [v for v in data if v["port_count"] > 0 or v["active"]]
+    except Exception:
+        data = []
+    return JsonResponse({"vlans": data})
 
 
 @api_cache(timeout=60)
 def api_switch_env(request, hostname):
-    sw = _sw(hostname)
+    """API لمعلومات البيئة (حرارة، مراوح، إمدادات طاقة)"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_environment(sw.ip_address, sw.snmp_community)
-    except:
-        d = {"temperatures": [], "fans": [], "power_supplies": []}
-    return JsonResponse(d)
+        data = get_environment(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = {"temperatures": [], "fans": [], "power_supplies": []}
+    return JsonResponse(data)
 
 
 @api_cache(timeout=60)
 def api_switch_stp(request, hostname):
-    sw = _sw(hostname)
+    """API لمعلومات Spanning Tree Protocol"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        d = get_stp_info(sw.ip_address, sw.snmp_community)
-    except:
-        d = {"root_bridge": "", "ports": [], "blocking_count": 0, "forwarding_count": 0}
-    return JsonResponse(d)
+        data = get_stp_info(sw.ip_address, sw.snmp_community)
+    except Exception:
+        data = {"root_bridge": "", "ports": [], "blocking_count": 0, "forwarding_count": 0}
+    return JsonResponse(data)
 
-
-# ============================================
-# APIs الجديدة: الميزات المتقدمة
-# ============================================
 
 @api_cache(timeout=30)
 def api_switch_cable_estimate(request, hostname):
-    """
-    تقدير طول الكابل بدون TDR
-    """
-    sw = _sw(hostname)
+    """تقدير طول الكابل بدون TDR"""
+    sw = _get_switch_by_hostname(hostname)
     try:
         estimates = estimate_cable_length(sw.ip_address, sw.snmp_community)
-        
-        # إضافة تحليل صحة الكابلات
         poor_cables = [e for e in estimates if e['quality'] == 'poor']
-        
         return JsonResponse({
             'estimates': estimates,
             'poor_cables_count': len(poor_cables),
@@ -632,20 +568,12 @@ def api_switch_cable_estimate(request, hostname):
 
 @api_cache(timeout=60)
 def api_switch_loops(request, hostname):
-    """
-    اكتشاف حلقات (Loops) في الشبكة
-    """
-    sw = _sw(hostname)
+    """اكتشاف حلقات (Loops) في الشبكة"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        # جلب جدول MAC للتحليل
         mac_data = get_mac_table(sw.ip_address, sw.snmp_community, limit=5000)
-        
-        # اكتشاف الـ Loops
         loops = detect_network_loops(sw.ip_address, sw.snmp_community, mac_data)
-        
-        # التحقق من STP
         stp_status = check_stp_consistency(sw.ip_address, sw.snmp_community)
-        
         return JsonResponse({
             'loops': loops,
             'stp_status': stp_status,
@@ -657,10 +585,8 @@ def api_switch_loops(request, hostname):
 
 @api_cache(timeout=60)
 def api_switch_duplex(request, hostname):
-    """
-    اكتشاف Duplex Mismatch
-    """
-    sw = _sw(hostname)
+    """اكتشاف Duplex Mismatch"""
+    sw = _get_switch_by_hostname(hostname)
     try:
         mismatches = detect_duplex_mismatch(sw.ip_address, sw.snmp_community)
         return JsonResponse(mismatches)
@@ -670,23 +596,17 @@ def api_switch_duplex(request, hostname):
 
 @api_cache(timeout=60)
 def api_switch_predictions(request, hostname):
-    """
-    توقع الأعطال (Failure Prediction)
-    """
-    sw = _sw(hostname)
+    """توقع الأعطال (Failure Prediction)"""
+    sw = _get_switch_by_hostname(hostname)
     try:
         predictor = FailurePredictor(sw.ip_address, sw.snmp_community)
-        
-        # محاولة تحميل البيانات التاريخية
         try:
             from core.models import Errors
             predictor.load_history(Errors, days=30)
-        except:
+        except Exception:
             pass
         
         predictions = predictor.get_full_prediction()
-        
-        # إضافة تقدير طول الكابل
         cable_estimates = estimate_cable_length(sw.ip_address, sw.snmp_community)
         
         # حساب درجة الخطر الإجمالية
@@ -704,7 +624,7 @@ def api_switch_predictions(request, hostname):
         
         return JsonResponse({
             'predictions': predictions,
-            'cable_estimates': cable_estimates[:10],  # أول 10 منافذ فقط
+            'cable_estimates': cable_estimates[:10],
             'risk_score': min(100, risk_score),
             'risk_level': risk_level,
             'timestamp': predictions['timestamp']
@@ -713,63 +633,11 @@ def api_switch_predictions(request, hostname):
         return JsonResponse({'error': str(e), 'predictions': {}})
 
 
-@api_cache(timeout=30)
-def api_switch_ai_diagnosis(request, hostname):
-    """
-    تشخيص موحد للواجهة مع fallback بدل الاعتماد على الـ WebSocket فقط.
-    """
-    sw = _sw(hostname)
-    try:
-        system = get_system_info(sw.ip_address, sw.snmp_community)
-        interfaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
-        errors = get_error_analysis(interfaces)
-        poe = get_poe_detail(sw.ip_address, sw.snmp_community)
-        loops = detect_network_loops(sw.ip_address, sw.snmp_community)
-        duplex = detect_duplex_mismatch(sw.ip_address, sw.snmp_community)
-
-        try:
-            from core.models import Errors
-            predictor = FailurePredictor(sw.ip_address, sw.snmp_community)
-            predictor.load_history(Errors, days=30)
-            predictions = predictor.get_full_prediction()
-        except Exception:
-            predictions = {}
-
-        diagnosis = build_ai_diagnosis(
-            system=system,
-            interfaces=interfaces,
-            errors=errors,
-            loops=loops,
-            duplex=duplex,
-            poe=poe,
-            predictions=predictions,
-        )
-
-        diagnosis.update({
-            "hostname": sw.hostname,
-            "timestamp": predictions.get("timestamp"),
-        })
-        return JsonResponse(diagnosis)
-    except Exception as e:
-        return JsonResponse({
-            "error": str(e),
-            "severity": "unknown",
-            "root_cause": "تعذر إكمال التشخيص حالياً",
-            "issues": [],
-            "recommendations": [],
-            "network_issues": [],
-            "prediction_items": [],
-        })
-
-
 @api_cache(timeout=60)
 def api_switch_health_report(request, hostname):
-    """
-    تقرير صحي شامل للسويتش
-    """
-    sw = _sw(hostname)
+    """تقرير صحي شامل للسويتش"""
+    sw = _get_switch_by_hostname(hostname)
     try:
-        # جمع جميع التحليلات
         system = get_system_info(sw.ip_address, sw.snmp_community)
         interfaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
         errors = get_error_analysis(interfaces)
@@ -777,12 +645,10 @@ def api_switch_health_report(request, hostname):
         loops = detect_network_loops(sw.ip_address, sw.snmp_community)
         duplex = detect_duplex_mismatch(sw.ip_address, sw.snmp_community)
         
-        # إحصاءات سريعة
         total_ports = len(interfaces)
         up_ports = len([i for i in interfaces if i['status'] == 'connected'])
         error_ports = len([i for i in interfaces if i['has_errors']])
         
-        # الحالة العامة
         if system.get('cpu_5s', 0) > 90 or error_ports > 5 or loops.get('has_loop'):
             overall_status = 'critical'
         elif system.get('cpu_5s', 0) > 70 or error_ports > 0 or poe.get('faulty'):
@@ -819,19 +685,75 @@ def api_switch_health_report(request, hostname):
                 'loop_count': loops.get('loop_count', 0),
                 'duplex_mismatch_count': duplex.get('count', 0)
             },
-            'recommendations': generate_recommendations(system, errors, loops, duplex, poe)
+            'recommendations': _generate_recommendations(system, errors, loops, duplex, poe)
         })
     except Exception as e:
         return JsonResponse({'error': str(e), 'overall_status': 'unknown'})
 
 
-def generate_recommendations(system, errors, loops, duplex, poe):
+@api_cache(timeout=30)
+def api_switch_clear_cache(request, hostname):
+    """مسح التخزين المؤقت لسويتش معين (للتحديث اليدوي)"""
+    sw = _get_switch_by_hostname(hostname)
+    clear_cache(sw.ip_address)
+    cache.clear()
+    return JsonResponse({'status': 'success', 'message': f'Cache cleared for {hostname}'})
+
+
+def api_switch_vlans_debug(request, hostname):
     """
-    توليد توصيات بناءً على التحليلات
+    endpoint مؤقت للتشخيص — يعرض البيانات الخام لـ VLANs.
+    يمكن إزالته بعد التأكد من عمل كل شيء بشكل صحيح.
     """
+    from core.services.monitoring import get_vlans
+    
+    sw = get_object_or_404(Switch, hostname=hostname)
+    
+    result = {
+        "switch": sw.hostname,
+        "ip": sw.ip_address,
+    }
+    
+    # جلب VLANات من switch_inspector
+    try:
+        vlans_full = get_vlans_full(sw.ip_address, sw.snmp_community)
+        result["vlans_full"] = vlans_full
+        result["vlans_full_count"] = len(vlans_full)
+    except Exception as e:
+        result["vlans_full_error"] = str(e)
+        result["vlans_full"] = []
+    
+    # جلب VLANات من monitoring
+    try:
+        vlans_mon = get_vlans(sw.ip_address, sw.snmp_community)
+        result["vlans_monitoring"] = vlans_mon
+        result["vlans_monitoring_count"] = len(vlans_mon)
+    except Exception as e:
+        result["vlans_monitoring_error"] = str(e)
+        result["vlans_monitoring"] = []
+    
+    # جلب أسماء المنافذ
+    try:
+        from core.services.switch_inspector import _get_if_names
+        if_names = _get_if_names(sw.ip_address, sw.snmp_community)
+        result["if_names"] = if_names[:20]
+    except Exception as e:
+        result["if_names_error"] = str(e)
+    
+    # اختبار OID_PORTMAP مباشرة
+    try:
+        portmap_raw = snmp_walk_with_index(sw.ip_address, sw.snmp_community, "1.3.6.1.4.1.9.9.68.1.2.2.1.2")
+        result["portmap_raw"] = portmap_raw[:20]
+    except Exception as e:
+        result["portmap_raw_error"] = str(e)
+    
+    return JsonResponse(result)
+
+
+def _generate_recommendations(system, errors, loops, duplex, poe):
+    """توليد توصيات بناءً على التحليلات (دالة مساعدة)"""
     recommendations = []
     
-    # توصيات CPU
     if system.get('cpu_5s', 0) > 85:
         recommendations.append({
             'severity': 'critical',
@@ -847,7 +769,6 @@ def generate_recommendations(system, errors, loops, duplex, poe):
             'action': 'راقب الـ traffic وراجع تكوين STP'
         })
     
-    # توصيات الأخطاء
     critical_errors = [e for e in errors if e['severity'] == 'critical']
     if critical_errors:
         recommendations.append({
@@ -858,7 +779,6 @@ def generate_recommendations(system, errors, loops, duplex, poe):
                       ', '.join([e['name'] for e in critical_errors[:3]])
         })
     
-    # توصيات الـ Loops
     if loops.get('has_loop'):
         recommendations.append({
             'severity': 'critical',
@@ -867,7 +787,6 @@ def generate_recommendations(system, errors, loops, duplex, poe):
             'action': 'افحص الكابلات المتكررة أو الأجهزة المتصلة بمنفذين'
         })
     
-    # توصيات Duplex
     if duplex.get('has_mismatch'):
         recommendations.append({
             'severity': 'warning',
@@ -876,7 +795,6 @@ def generate_recommendations(system, errors, loops, duplex, poe):
             'action': 'غيّر إعدادات الـ duplex إلى Auto أو Full على الطرفين'
         })
     
-    # توصيات PoE
     if poe.get('faulty'):
         recommendations.append({
             'severity': 'warning',
@@ -885,7 +803,6 @@ def generate_recommendations(system, errors, loops, duplex, poe):
             'action': 'افحص الأجهزة المتصلة واستهلاك الطاقة'
         })
     
-    # توصيات عامة
     if not recommendations:
         recommendations.append({
             'severity': 'good',
@@ -897,45 +814,545 @@ def generate_recommendations(system, errors, loops, duplex, poe):
     return recommendations
 
 
-@api_cache(timeout=30)
-def api_switch_clear_cache(request, hostname):
+# ============================================================
+# 8. Switch Inspector APIs (لصفحة MAC Tracker)
+# ============================================================
+
+@require_GET
+def api_mac_table(request, switch_id):
     """
-    مسح التخزين المؤقت لسويتش معين (للتحديث اليدوي)
+    GET /api/mac/<switch_id>/
+    params: ?limit=500&offset=0&search=xx:xx:xx
+    يُرجع MAC table مع فلترة اختيارية.
     """
-    sw = _sw(hostname)
-    clear_cache(sw.ip_address)
-    cache.clear()  # مسح cache Django أيضاً
-    return JsonResponse({'status': 'success', 'message': f'Cache cleared for {hostname}'})
+    sw = _get_switch_by_id(switch_id)
+    limit = int(request.GET.get("limit", 500))
+    offset = int(request.GET.get("offset", 0))
+    search = request.GET.get("search", "").strip().lower()
+
+    data = get_mac_table(sw.ip_address, sw.snmp_community, limit=limit, offset_n=offset)
+
+    if search:
+        filtered = [e for e in data["mac_table"] if search in e["mac"].lower() or search in (e["port"] or "").lower()]
+        data["mac_table"] = filtered
+        data["total"] = len(filtered)
+
+    for entry in data["mac_table"]:
+        entry["switch_hostname"] = sw.hostname
+        entry["switch_id"] = sw.id
+
+    return _json(data)
 
 
+@require_GET
+def api_mac_search_global(request):
+    """
+    GET /api/mac/search/?q=xx:xx:xx
+    يبحث في كل السويتشات المتاحة عن MAC معين.
+    """
+    query = request.GET.get("q", "").strip().lower()
+    if len(query) < 4:
+        return _json({"error": "يجب أن يكون البحث 4 أحرف على الأقل"}, 400)
 
-def api_switch_vlans_debug(request, hostname):
-    """endpoint مؤقت للتشخيص"""
-    from core.models import Switch
-    from core.services.snmp import snmp_walk_with_index
-    sw = get_object_or_404(Switch, hostname=hostname)
+    results = []
+    switches = Switch.objects.all()
 
-    # IF_NAME مع ifIndex الحقيقي
-    if_name_idx = snmp_walk_with_index(
-        sw.ip_address, sw.snmp_community,
-        "1.3.6.1.2.1.31.1.1.1.1"
-    ) or []
+    for sw in switches:
+        try:
+            data = get_mac_table(sw.ip_address, sw.snmp_community, limit=2000)
+            for entry in data.get("mac_table", []):
+                if query in entry["mac"].lower() or query in (entry["port"] or "").lower():
+                    results.append({
+                        "mac": entry["mac"],
+                        "port": entry["port"],
+                        "vlan_id": entry.get("vlan_id"),
+                        "type": entry.get("type", "learned"),
+                        "switch_hostname": sw.hostname,
+                        "switch_ip": sw.ip_address,
+                        "switch_id": sw.id,
+                        "location": sw.location.name if sw.location else "—",
+                    })
+        except Exception:
+            pass
 
-    # VM_VLAN مع ifIndex
-    vm_vlan_idx = snmp_walk_with_index(
-        sw.ip_address, sw.snmp_community,
-        "1.3.6.1.4.1.9.9.68.1.2.2.1.2"
-    ) or []
+    return _json({"results": results, "count": len(results), "query": query})
 
-    # بناء الـ mapping
-    ifidx2name = {s: v for s, v in if_name_idx}
 
-    # أول 20 نتيجة لكل منهم
-    return JsonResponse({
-        "if_name_sample" : if_name_idx[:20],
-        "vm_vlan_sample" : vm_vlan_idx[:20],
-        "ifidx_mapping"  : {
-            s: ifidx2name.get(s, "?")
-            for s, _ in vm_vlan_idx[:20]
+@require_GET
+def api_system_info(request, switch_id):
+    """API لمعلومات النظام الأساسية (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_system_info(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_interfaces(request, switch_id):
+    """API لتفاصيل المنافذ (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    ifaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
+    errors = get_error_analysis(ifaces)
+    return _json({"interfaces": ifaces, "errors": errors})
+
+
+@require_GET
+def api_vlans(request, switch_id):
+    """API لـ VLANs (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    vlans = get_vlans_full(sw.ip_address, sw.snmp_community)
+
+    CAMERA_KEYWORDS = ["camera", "cam", "cctv", "vlan100", "surveillance"]
+    AP_KEYWORDS = ["ap", "wifi", "wireless", "wlan", "access_point", "accesspoint"]
+
+    for v in vlans:
+        name_lower = v["name"].lower()
+        v["is_camera"] = any(k in name_lower for k in CAMERA_KEYWORDS) or v["vlan_id"] == 100
+        v["is_ap"] = any(k in name_lower for k in AP_KEYWORDS)
+
+    return _json(vlans)
+
+
+@require_GET
+def api_stp(request, switch_id):
+    """API لمعلومات STP (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_stp_info(sw.ip_address, sw.snmp_community)
+
+    blocking = [p for p in data["ports"] if p["blocking"]]
+    loops = []
+    if data["blocking_count"] > 10:
+        loops.append({
+            "severity": "warning",
+            "msg": f"{data['blocking_count']} ports in blocking state — قد يكون هناك loop أو misconfiguration",
+        })
+    if not data["root_bridge"]:
+        loops.append({
+            "severity": "critical",
+            "msg": "لم يتم العثور على Root Bridge — تحقق من STP configuration",
+        })
+
+    data["analysis"] = loops
+    data["blocking_ports"] = blocking
+    return _json(data)
+
+
+@require_GET
+def api_poe(request, switch_id):
+    """API لمعلومات PoE (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_poe_detail(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_cdp(request, switch_id):
+    """API لجيران CDP (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_cdp_neighbors(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_port_security(request, switch_id):
+    """API لمعلومات Port Security (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_port_security(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_environment(request, switch_id):
+    """API لمعلومات البيئة (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_environment(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_tdr(request, switch_id):
+    """API لنتائج TDR (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_tdr_results(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_ip_brief(request, switch_id):
+    """API لـ IP Interface Brief (لـ MAC Tracker)"""
+    sw = _get_switch_by_id(switch_id)
+    data = get_ip_interfaces(sw.ip_address, sw.snmp_community)
+    return _json(data)
+
+
+@require_GET
+def api_connectivity(request, switch_id):
+    """API لفحص اتصالية السويتش (SNMP + Ping)"""
+    sw = _get_switch_by_id(switch_id)
+    result = {"switch_id": sw.id, "hostname": sw.hostname, "ip": sw.ip_address}
+
+    # SNMP check
+    try:
+        info = get_system_info(sw.ip_address, sw.snmp_community)
+        result["snmp_ok"] = bool(info.get("hostname"))
+        result["snmp_name"] = info.get("hostname", "")
+        result["uptime"] = info.get("uptime", "")
+    except Exception as e:
+        result["snmp_ok"] = False
+        result["snmp_error"] = str(e)
+
+    # Ping check
+    try:
+        if platform.system().lower() == "windows":
+            cmd = ["ping", "-n", "2", sw.ip_address]
+        else:
+            cmd = ["ping", "-c", "2", "-W", "2", sw.ip_address]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        result["ping_ok"] = r.returncode == 0
+        result["ping_out"] = (r.stdout + r.stderr)[:300]
+    except Exception as e:
+        result["ping_ok"] = False
+        result["ping_error"] = str(e)
+
+    result["status"] = (
+        "online" if result.get("snmp_ok") and result.get("ping_ok") else
+        "degraded" if result.get("snmp_ok") or result.get("ping_ok") else
+        "offline"
+    )
+    return _json(result)
+
+
+@csrf_exempt
+@require_POST
+def api_ping(request):
+    """
+    POST /api/ping/
+    body: {"target": "192.168.1.1", "count": 4}
+    يُشغِّل ping من السيرفر ويُرجع النتائج.
+    """
+    try:
+        body = json.loads(request.body)
+        target = body.get("target", "").strip()
+        count = min(int(body.get("count", 4)), 10)
+
+        if not target:
+            return _json({"error": "target مطلوب"}, 400)
+
+        import ipaddress
+        try:
+            ipaddress.ip_address(target)
+        except ValueError:
+            return _json({"error": "IP address غير صالح"}, 400)
+
+        is_windows = platform.system().lower() == "windows"
+        cmd = (
+            ["ping", "-n", str(count), target]
+            if is_windows else
+            ["ping", "-c", str(count), "-W", "2", target]
+        )
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        output = result.stdout + result.stderr
+        stats = _parse_ping_stats(output)
+
+        return _json({
+            "target": target,
+            "success": result.returncode == 0,
+            "output": output,
+            "stats": stats,
+        })
+
+    except subprocess.TimeoutExpired:
+        return _json({"error": "timeout — الجهاز لا يستجيب", "success": False})
+    except Exception as e:
+        return _json({"error": str(e), "success": False}, 500)
+
+
+def _parse_ping_stats(output: str) -> dict:
+    """يستخرج packet loss وزمن الاستجابة من ping output (دالة مساعدة)"""
+    import re
+    stats = {"sent": 0, "received": 0, "loss_pct": 100, "avg_ms": None}
+
+    m = re.search(r'(\d+) packets transmitted, (\d+) received', output)
+    if m:
+        stats["sent"] = int(m.group(1))
+        stats["received"] = int(m.group(2))
+        if stats["sent"] > 0:
+            stats["loss_pct"] = round((stats["sent"] - stats["received"]) / stats["sent"] * 100)
+
+    m = re.search(r'Sent = (\d+), Received = (\d+)', output)
+    if m:
+        stats["sent"] = int(m.group(1))
+        stats["received"] = int(m.group(2))
+        if stats["sent"] > 0:
+            stats["loss_pct"] = round((stats["sent"] - stats["received"]) / stats["sent"] * 100)
+
+    m = re.search(r'rtt \S+ = [\d.]+/([\d.]+)/', output)
+    if m:
+        stats["avg_ms"] = float(m.group(1))
+
+    m = re.search(r'Average = (\d+)ms', output)
+    if m:
+        stats["avg_ms"] = float(m.group(1))
+
+    return stats
+
+
+@require_GET
+def api_duplex_analysis(request, switch_id):
+    """
+    GET /api/duplex/<switch_id>/
+    يكتشف مشاكل Duplex/Speed mismatch.
+    """
+    sw = _get_switch_by_id(switch_id)
+    ifaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
+
+    issues = []
+    for ifc in ifaces:
+        if ifc["status"] != "connected":
+            continue
+
+        err_total = ifc["in_errors"] + ifc["out_errors"]
+        if err_total > 100:
+            severity = "critical" if err_total > 1000 else "warning"
+            issues.append({
+                "port": ifc["name"],
+                "speed": ifc["speed_str"],
+                "in_errors": ifc["in_errors"],
+                "out_errors": ifc["out_errors"],
+                "in_discards": ifc["in_discards"],
+                "out_discards": ifc["out_discards"],
+                "severity": severity,
+                "diagnosis": _diagnose_duplex(ifc),
+                "fix": _fix_duplex(ifc),
+            })
+
+    return _json({
+        "issues": issues,
+        "total_issues": len(issues),
+        "clean": len(issues) == 0,
+    })
+
+
+def _diagnose_duplex(ifc):
+    """تشخيص مشكلة Duplex (دالة مساعدة)"""
+    parts = []
+    if ifc["in_errors"] > 100:
+        parts.append("CRC errors مرتفعة — احتمال duplex mismatch أو كابل تالف")
+    if ifc["out_errors"] > 50:
+        parts.append("Output errors — احتمال congestion أو MTU mismatch")
+    if ifc["in_discards"] > 50:
+        parts.append("Input drops — buffer overflow أو traffic burst")
+    return " | ".join(parts) if parts else "مشكلة غير محددة"
+
+
+def _fix_duplex(ifc):
+    """حلول مقترحة لمشكلة Duplex (دالة مساعدة)"""
+    fixes = []
+    if ifc["in_errors"] > 100:
+        fixes.append("تحقق من duplex/speed على الطرفين (auto-auto أو full-full)")
+        fixes.append("استبدل الكابل إذا استمرت المشكلة")
+    if ifc["out_errors"] > 50:
+        fixes.append("تحقق من MTU على الطرفين")
+        fixes.append("فعّل QoS إذا كان الـ link مشغولاً")
+    return fixes
+
+
+@require_GET
+def api_vlan_troubleshoot(request, switch_id):
+    """
+    GET /api/vlan/troubleshoot/<switch_id>/
+    يحلل حالة VLANs الكاميرات والـ AP ويبين المشاكل.
+    """
+    sw = _get_switch_by_id(switch_id)
+    vlans = get_vlans_full(sw.ip_address, sw.snmp_community)
+    ifaces = get_interfaces_detail(sw.ip_address, sw.snmp_community)
+
+    port_traffic = {ifc["name"]: ifc for ifc in ifaces}
+
+    CAMERA_KEYWORDS = ["camera", "cam", "cctv", "surveillance"]
+    AP_KEYWORDS = ["ap", "wifi", "wireless", "wlan"]
+
+    issues = []
+    camera_vl = []
+    ap_vl = []
+
+    for v in vlans:
+        name_lower = v["name"].lower()
+        is_cam = any(k in name_lower for k in CAMERA_KEYWORDS) or v["vlan_id"] == 100
+        is_ap = any(k in name_lower for k in AP_KEYWORDS)
+
+        if is_cam:
+            camera_vl.append(v)
+        if is_ap:
+            ap_vl.append(v)
+
+        if not v["active"]:
+            issues.append({
+                "vlan_id": v["vlan_id"],
+                "name": v["name"],
+                "severity": "warning",
+                "msg": f"VLAN {v['vlan_id']} ({v['name']}) غير نشط",
+                "fix": "تأكد من تفعيل الـ VLAN: no shutdown على السويتش",
+            })
+
+        if v["port_count"] == 0:
+            issues.append({
+                "vlan_id": v["vlan_id"],
+                "name": v["name"],
+                "severity": "info",
+                "msg": f"VLAN {v['vlan_id']} ({v['name']}) لا توجد منافذ مرتبطة",
+                "fix": "تحقق من إعدادات access/trunk على المنافذ",
+            })
+
+        for port_name in v.get("port_names", []):
+            ifc = port_traffic.get(port_name)
+            if ifc and (ifc["in_errors"] + ifc["out_errors"]) > 100:
+                issues.append({
+                    "vlan_id": v["vlan_id"],
+                    "name": v["name"],
+                    "severity": "warning",
+                    "msg": f"Port {port_name} (VLAN {v['vlan_id']}) — أخطاء عالية: in={ifc['in_errors']}, out={ifc['out_errors']}",
+                    "fix": "تحقق من الكابل والـ duplex على هذا المنفذ",
+                })
+
+    return _json({
+        "issues": issues,
+        "camera_vlans": camera_vl,
+        "ap_vlans": ap_vl,
+        "total_issues": len(issues),
+    })
+
+
+# ============================================================
+# 9. Port History APIs
+# ============================================================
+
+@require_GET
+def api_port_timeline(request, switch_id, port_name):
+    """جدول زمني لمنفذ واحد"""
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = int(request.GET.get("hours", 24))
+    data = get_port_timeline(sw, port_name, hours)
+    return JsonResponse(data, safe=False)
+
+
+@require_GET
+def api_switch_events(request, switch_id):
+    """
+    GET /api/history/events/<sw_id>/
+    params: ?hours=24&severity=critical&event_type=link_down
+    كل أحداث سويتش في نطاق زمني مع إمكانية الفلترة.
+    """
+    hours = int(request.GET.get("hours", 24))
+    severity = request.GET.get("severity")
+    event_type = request.GET.get("event_type")
+    data = get_switch_events(_get_switch_by_id(switch_id), hours, severity, event_type)
+    return _json(data)
+
+
+@require_GET
+def api_flap_report(request, switch_id):
+    """
+    GET /api/history/flaps/<sw_id>/
+    params: ?hours=24
+    تقرير المنافذ الأكثر flap مرتبة تنازلياً.
+    """
+    hours = int(request.GET.get("hours", 24))
+    data = get_flap_report(_get_switch_by_id(switch_id), hours)
+    return _json(data)
+
+
+from core.services.port_history import (
+    get_port_diagnostics,
+    get_port_timeline,
+)
+
+def api_port_diagnostics(request, switch_id, port_name):
+    """تشخيص شامل لمنفذ واحد"""
+    sw = get_object_or_404(Switch, id=switch_id)
+    data = get_port_diagnostics(sw, port_name)
+    return JsonResponse(data, safe=False)
+
+
+@require_GET
+def api_all_ports_health(request, switch_id):
+    """
+    GET /api/history/health/<sw_id>/
+    params: ?hours=24
+    درجة صحة كل منافذ السويتش.
+    """
+    hours = int(request.GET.get("hours", 24))
+    data = get_all_ports_health(_get_switch_by_id(switch_id), hours)
+    return _json(data)
+
+
+@require_GET
+def api_anomaly(request, switch_id, port_name):
+    """
+    GET /api/history/anomaly/<sw_id>/<port>/
+    params: ?hours=24
+    يكتشف الشواذ الإحصائية في بيانات المنفذ.
+    """
+    hours = int(request.GET.get("hours", 24))
+    data = get_anomaly_report(_get_switch_by_id(switch_id), port_name, hours)
+    return _json(data)
+
+
+@require_GET
+def api_error_trend(request, switch_id, port_name):
+    """
+    GET /api/history/trend/<sw_id>/<port>/
+    يحسب اتجاه الأخطاء: هل يزداد أم يقل؟
+    """
+    hours = int(request.GET.get("hours", 24))
+    data = get_error_trend(_get_switch_by_id(switch_id), port_name, hours)
+    return _json(data)
+
+
+@require_GET
+def api_traffic_baseline(request, switch_id, port_name):
+    """
+    GET /api/history/baseline/<sw_id>/<port>/
+    params: ?days=7
+    يحسب خط قاعدة الترافيك لآخر N أيام.
+    """
+    days = int(request.GET.get("days", 7))
+    data = get_traffic_baseline(_get_switch_by_id(switch_id), port_name, days)
+    return _json(data)
+
+
+@require_GET
+def api_history_summary(request, switch_id):
+    """
+    GET /api/history/summary/<sw_id>/
+    ملخص شامل للوحة التشخيص الرئيسية.
+    """
+    sw = _get_switch_by_id(switch_id)
+    hours = int(request.GET.get("hours", 24))
+
+    events = get_switch_events(sw, hours)
+    flaps = get_flap_report(sw, hours)
+    health = get_all_ports_health(sw, hours)
+
+    critical_ports = [p for p in health if p["severity"] == "critical"]
+    warning_ports = [p for p in health if p["severity"] == "warning"]
+
+    top_event = max(events["by_type"].items(), key=lambda x: x[1], default=("none", 0))
+
+    return _json({
+        "switch": sw.hostname,
+        "hours": hours,
+        "total_events": events["total"],
+        "by_severity": events["by_severity"],
+        "top_event_type": top_event[0],
+        "top_event_count": top_event[1],
+        "critical_ports": critical_ports[:5],
+        "warning_ports": warning_ports[:5],
+        "flapping_ports": flaps[:5],
+        "top_ports": events["top_ports"][:5],
+        "health_summary": {
+            "critical": len(critical_ports),
+            "warning": len(warning_ports),
+            "ok": len([p for p in health if p["severity"] == "ok"]),
         },
     })

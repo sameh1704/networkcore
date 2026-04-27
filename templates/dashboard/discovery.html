@@ -162,7 +162,7 @@ body { background: var(--bg); color: var(--txt); font-family: var(--mono); trans
 
 <script>
 let isScanning = false;
-let foundCount = 0, newCount = 0, updCount = 0;
+let foundCount = 0, newCount = 0, updCount = 0, logCount = 0;
 
 // ── Theme Engine ──
 function toggleTheme() {
@@ -187,23 +187,44 @@ async function initiateDiscovery() {
   const method = document.getElementById('method').value;
 
   try {
-    // 1. SNMP Auto Discovery (الرابط الأول)
+    // 1. SNMP Auto Discovery
     if (method === 'snmp' || method === 'both') {
-      updateStatus("Scanning Network Range...");
-      updateProgress(30);
-      const res = await fetch('/api/discover/', { // استخدمنا الرابط auto_discovery_api
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-        body: JSON.stringify({ network, community })
-      });
-      const data = await res.json();
-      processItems(data.discovered || data.switches || []);
+      updateStatus("Scanning Network Range... (this may take 1-2 minutes)");
+      updateProgress(10);
+      logCount++;
+      document.getElementById('s-log').innerText = logCount;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+
+      try {
+        const res = await fetch('/api/discover/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+          body: JSON.stringify({ network, community }),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        const data = await res.json();
+        processItems(data.discovered || data.switches || []);
+        updateProgress(method === 'both' ? 60 : 90);
+      } catch (e) {
+        clearTimeout(timer);
+        if (e.name === 'AbortError') {
+          updateStatus("SNMP Scan timed out after 3 minutes", true);
+        } else {
+          throw e;
+        }
+      }
     }
 
-    // 2. Smart Discovery (الرابط الثاني)
+    // 2. Smart Discovery (CDP/LLDP)
     if (method === 'smart' || method === 'both') {
       updateStatus("Analyzing Topology (CDP/LLDP)...");
       updateProgress(70);
+      logCount++;
+      document.getElementById('s-log').innerText = logCount;
+
       const seedIp = network.split('/')[0];
       const res = await fetch('/api/smart-discovery/', {
         method: 'POST',
@@ -218,7 +239,7 @@ async function initiateDiscovery() {
     updateProgress(100);
   } catch (err) {
     console.error(err);
-    updateStatus("Discovery Failed: API Error", true);
+    updateStatus("Discovery Failed: " + err.message, true);
   } finally {
     stopUI();
   }

@@ -1,6 +1,6 @@
 """
 Django settings for config project.
-Compatible with Docker + Celery + Redis + Channels
+Compatible with Docker + Celery + Redis + Channels + Port History
 """
 
 from pathlib import Path
@@ -111,7 +111,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("redis", 6379)],  # مهم جداً
+            "hosts": [("redis", 6379)],
         },
     },
 }
@@ -134,24 +134,75 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
 
 
-# ============================================================
-# CELERY BEAT SCHEDULE
-# ============================================================
+# ════════════════════════════════════════════════════════════
+#  PORT HISTORY SETTINGS (إدارة مساحة التخزين)
+# ════════════════════════════════════════════════════════════
+
+# ── إعدادات الاحتفاظ بالبيانات ─────────────────────────────
+# قلّل هذه القيم إذا كان القرص يمتلئ بسرعة
+
+# آخر 6 ساعات: لقطة كل 5 دقائق (تفصيل كامل)
+PORT_HISTORY_FULL_HOURS    = getattr(locals(), 'PORT_HISTORY_FULL_HOURS', 6)
+
+# 6 ساعات → 24 ساعة: لقطة كل 30 دقيقة (تخفيف)
+PORT_HISTORY_MEDIUM_HOURS  = getattr(locals(), 'PORT_HISTORY_MEDIUM_HOURS', 24)
+
+# 24 ساعة → 7 أيام: لقطة كل ساعة
+PORT_HISTORY_LOW_DAYS      = getattr(locals(), 'PORT_HISTORY_LOW_DAYS', 7)
+
+# الأحداث تُحفظ 30 يوماً
+PORT_HISTORY_EVENTS_DAYS   = getattr(locals(), 'PORT_HISTORY_EVENTS_DAYS', 30)
+
+# ── حدود القرص (Disk thresholds) ───────────────────────────
+# عند 85% امتلاء → تنظيف طارئ
+PORT_HISTORY_DISK_EMERGENCY = getattr(locals(), 'PORT_HISTORY_DISK_EMERGENCY', 85)
+
+# عند 90% امتلاء → إيقاف جمع اللقطات الجديدة
+PORT_HISTORY_DISK_PAUSE     = getattr(locals(), 'PORT_HISTORY_DISK_PAUSE', 90)
+
+
+# ════════════════════════════════════════════════════════════
+#  CELERY BEAT SCHEDULE (جدولة المهام)
+# ════════════════════════════════════════════════════════════
+
 CELERY_BEAT_SCHEDULE = {
 
-    # جمع بيانات المنافذ كل 5 دقائق
+    # ── جمع بيانات المنافذ (Port History) ──────────────────
+    # كل 5 دقائق: جمع لقطات لكل السويتشات
     'collect-all-port-snapshots': {
         'task': 'core.tasks.task_collect_all_snapshots',
         'schedule': crontab(minute='*/5'),
     },
 
-    # تنظيف البيانات القديمة يومياً
-    'cleanup-old-history': {
-        'task': 'core.tasks.task_cleanup_history',
+    # ── التنظيف الذكي للمساحة (الأهم لمنع امتلاء القرص) ────
+    # كل ساعة: تنظيف خفيف
+    'smart-cleanup-port-history': {
+        'task': 'core.tasks.cleanup_port_history_task',
+        'schedule': crontab(minute=0),  # بداية كل ساعة
+    },
+
+    # كل يوم الساعة 3 صباحاً: تنظيف عميق
+    'deep-cleanup-port-history': {
+        'task': 'core.tasks.cleanup_port_history_task',
         'schedule': crontab(hour=3, minute=0),
     },
 
-    # بث الشبكة كل 10 ثواني
+    # ── مراقبة صحة القرص ───────────────────────────────────
+    # كل 30 دقيقة: تقرير عن حالة المساحة
+    'disk-health-report': {
+        'task': 'core.tasks.disk_health_report',
+        'schedule': crontab(minute='*/30'),
+    },
+
+    # ── تنظيف قديم (احتياطي) ────────────────────────────────
+    # يومياً الساعة 3 صباحاً (ظل للتوافق مع الإعداد القديم)
+    'cleanup-old-history': {
+        'task': 'core.tasks.cleanup_port_history_task',
+        'schedule': crontab(hour=3, minute=0),
+    },
+
+    # ── بث الشبكة عبر WebSocket ─────────────────────────────
+    # كل 10 ثواني
     'broadcast-network': {
         'task': 'core.tasks.broadcast_network',
         'schedule': 10.0,
@@ -196,12 +247,15 @@ STATICFILES_DIRS = [
 # ============================================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
 # ============================================================
 # AUTHENTICATION REDIRECTION
 # ============================================================
 # صفحة تسجيل الدخول (للمستخدمين غير المسجلين)
 LOGIN_URL = 'login'
-# التوجيه بعد تسجيل الدخول (اسم المسار في urls.py)
+
+# التوجيه بعد تسجيل الدخول
 LOGIN_REDIRECT_URL = 'dashboard'
+
 # التوجيه بعد تسجيل الخروج
 LOGOUT_REDIRECT_URL = 'login'

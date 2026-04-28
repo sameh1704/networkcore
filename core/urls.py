@@ -29,6 +29,10 @@ urlpatterns = [
     path("", views.dashboard_page, name="dashboard"),
     path("dashboard/", views.dashboard_page, name="dashboard_alt"),
     path("topology/",  views.topology_page),
+    path('topology/<int:location_id>/', views.topology_page, name='topology_location'),
+    path('api/locations/', views.locations_api, name='locations_api'),
+    path('api/switches/', views.switches_api, name='switches_api'),
+    path('api/topology-links/', views.topology_links_api, name='topology_links_api'),
     # صفحة سويتشات موقع معين (باستخدام ID الموقع)
     path('location/<int:location_id>/', views.location_switches_page, name='location_switches'),
     
@@ -227,5 +231,23 @@ urlpatterns += [
     path('api/history/diagnose/<int:switch_id>/<path:port_name>/', views.api_port_diagnostics, name='api_port_diagnostics'),
     
     
+    
+
+    
+    # ============================================================
+    # 8. Camera VLAN Analysis (صفحة مستقلة)
+    # ============================================================
+    
+    # صفحة تحليل كاميرات VLAN 100
+    path("camera-vlan/", views.camera_vlan_page, name="camera_vlan_page"),
+    
+    # API لتحليل كاميرات سويتش معين
+    path("api/camera-vlan/<int:switch_id>/", views.api_camera_vlan_analysis, name="api_camera_vlan_analysis"),
+    
+    # API لملخص عام (اختياري)
+    path("api/camera-vlan/summary/", views.api_camera_vlan_summary, name="api_camera_vlan_summary"),
+    
+    # API لتصدير البيانات (اختياري)
+    path("api/camera-vlan/export/<int:switch_id>/", views.api_camera_vlan_export, name="api_camera_vlan_export"),
 
 ]

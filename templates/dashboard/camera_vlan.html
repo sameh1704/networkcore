@@ -1,0 +1,318 @@
+<!-- templates/dashboard/camera_vlan.html -->
+{% extends "layout/base.html" %}
+{% block content %}
+<style>
+.camera-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+.camera-card:hover { border-color: var(--accent); }
+.camera-health {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 28px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.health-good { background: var(--ok); color: #000; }
+.health-warning { background: var(--warn); color: #000; }
+.health-critical { background: var(--danger); color: #fff; }
+.traffic-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+.traffic-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; }
+.quality-low { background: #ff386022; color: var(--danger); }
+.quality-med { background: #ffb80022; color: var(--warn); }
+.quality-high { background: #00ff9d22; color: var(--ok); }
+</style>
+
+<div class="pg">
+  <div class="hdr">
+    <div>
+      <h1>📷 Camera VLAN Monitor</h1>
+      <div class="sub">VLAN 100 — Surveillance Cameras Analysis</div>
+    </div>
+    <a href="{% url 'dashboard' %}" class="back">← Dashboard</a>
+  </div>
+
+  <!-- Filters: Location → Switch -->
+  <div class="search-wrap" style="margin-bottom: 20px;">
+    <select id="location-select" class="scope-sel" onchange="filterSwitchesByLocation()">
+      <option value="">— Select Location —</option>
+      {% for loc in locations %}
+      <option value="{{ loc.id }}" data-name="{{ loc.name }}">{{ loc.name }}</option>
+      {% endfor %}
+    </select>
+    
+    <select id="switch-select" class="scope-sel" onchange="loadCameraData()" disabled>
+      <option value="">— Select Switch —</option>
+    </select>
+    
+    <select id="hours-select" class="scope-sel" onchange="loadCameraData()">
+      <option value="1">Last Hour</option>
+      <option value="6" selected>Last 6 Hours</option>
+      <option value="24">Last 24 Hours</option>
+    </select>
+    
+    <button class="search-btn" onclick="loadCameraData()">Analyze</button>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="stat-row" id="summary-cards" style="display:none">
+    <div class="stat"><div class="stat-lbl">Total Cameras</div><div class="stat-val" id="total-cam">—</div></div>
+    <div class="stat"><div class="stat-lbl">Online</div><div class="stat-val" id="online-cam" style="color:var(--ok)">—</div></div>
+    <div class="stat"><div class="stat-lbl">Offline</div><div class="stat-val" id="offline-cam" style="color:var(--danger)">—</div></div>
+    <div class="stat"><div class="stat-lbl">Silent Cameras</div><div class="stat-val" id="silent-cam" style="color:var(--warn)">—</div></div>
+    <div class="stat"><div class="stat-lbl">Total Traffic</div><div class="stat-val" id="total-traffic" style="color:var(--accent)">—</div></div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="ch-row" style="margin-bottom: 20px;">
+    <div class="chc"><div class="cht">📊 Traffic Distribution (Top 10)</div><canvas id="trafficChart" height="200"></canvas></div>
+    <div class="chc"><div class="cht">📈 Health Score Distribution</div><canvas id="healthChart" height="200"></canvas></div>
+  </div>
+
+  <!-- Top 5 Highest Traffic -->
+  <div class="st">🔥 TOP 5 HIGHEST TRAFFIC</div>
+  <div id="top-cameras"></div>
+
+  <!-- Silent Cameras (Online but no traffic) -->
+  <div class="st">😴 SILENT CAMERAS (Online but no traffic)</div>
+  <div id="silent-cameras"></div>
+
+  <!-- Quality Insights -->
+  <div class="st">🎬 VIDEO QUALITY INSIGHTS</div>
+  <div id="quality-insights"></div>
+
+  <!-- All Cameras -->
+  <div class="st">🗺 ALL CAMERAS</div>
+  <div id="all-cameras"></div>
+
+  <!-- Issues & Recommendations -->
+  <div class="st">⚠ ISSUES & RECOMMENDATIONS</div>
+  <div id="issues-list"></div>
+
+  <!-- Predictive Alerts -->
+  <div class="st">🔮 PREDICTIVE ALERTS (Coming soon)</div>
+  <div id="predictive-alerts"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let trafficChart = null;
+let healthChart = null;
+
+// Filter switches by selected location
+function filterSwitchesByLocation() {
+  const locId = document.getElementById('location-select').value;
+  const switchSelect = document.getElementById('switch-select');
+  const options = switchSelect.querySelectorAll('option[data-loc-id]');
+  
+  switchSelect.innerHTML = '<option value="">— Select Switch —</option>';
+  
+  if (!locId) {
+    switchSelect.disabled = true;
+    return;
+  }
+  
+  let hasSwitches = false;
+  options.forEach(opt => {
+    if (opt.getAttribute('data-loc-id') === locId) {
+      switchSelect.appendChild(opt.cloneNode(true));
+      hasSwitches = true;
+    }
+  });
+  
+  switchSelect.disabled = !hasSwitches;
+  if (hasSwitches) loadCameraData();
+}
+
+// Load switches data from Django
+const switchesData = {{ switches_data|safe }};
+
+function populateSwitches() {
+  const switchSelect = document.getElementById('switch-select');
+  switchesData.forEach(sw => {
+    const opt = document.createElement('option');
+    opt.value = sw.id;
+    opt.textContent = sw.hostname;
+    opt.setAttribute('data-loc-id', sw.location_id);
+    switchSelect.appendChild(opt);
+  });
+}
+populateSwitches();
+
+const API = (endpoint) => fetch(`/api/${endpoint}`).then(r => r.json());
+
+async function loadCameraData() {
+  const swId = document.getElementById('switch-select').value;
+  const hours = document.getElementById('hours-select').value;
+  
+  if (!swId) return;
+  
+  document.getElementById('summary-cards').style.display = 'none';
+  document.getElementById('top-cameras').innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+  
+  try {
+    const data = await API(`camera-vlan/${swId}/?hours=${hours}`);
+    renderCameraData(data);
+  } catch(e) {
+    document.getElementById('top-cameras').innerHTML = `<div class="empty-state" style="color:var(--danger)">Error: ${e.message}</div>`;
+  }
+}
+
+function renderCameraData(data) {
+  // Summary
+  document.getElementById('summary-cards').style.display = 'grid';
+  document.getElementById('total-cam').textContent = data.summary.total_cameras;
+  document.getElementById('online-cam').textContent = data.summary.online_cameras;
+  document.getElementById('offline-cam').textContent = data.summary.offline_cameras;
+  document.getElementById('silent-cam').textContent = data.summary.silent_cameras || 0;
+  document.getElementById('total-traffic').textContent = data.summary.total_traffic_mbps + ' Mbps';
+  
+  // Charts
+  const top10 = data.top_traffic.slice(0, 10);
+  const labels = top10.map(c => c.port);
+  const trafficData = top10.map(c => c.traffic_mbps);
+  const healthData = top10.map(c => c.health_score);
+  
+  if (trafficChart) trafficChart.destroy();
+  if (healthChart) healthChart.destroy();
+  
+  const ctx1 = document.getElementById('trafficChart').getContext('2d');
+  const ctx2 = document.getElementById('healthChart').getContext('2d');
+  
+  trafficChart = new Chart(ctx1, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Traffic (Mbps)', data: trafficData, backgroundColor: '#00d4ff', borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#4a6a8a' } } } }
+  });
+  
+  healthChart = new Chart(ctx2, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Health Score (%)', data: healthData, backgroundColor: '#00ff9d', borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#4a6a8a' } } } }
+  });
+  
+  // Top Cameras
+  const topHtml = data.top_traffic.slice(0, 5).map(cam => `
+    <div class="camera-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
+        <div><span class="camera-health health-${cam.health_score >= 70 ? 'good' : cam.health_score >= 40 ? 'warning' : 'critical'}">${cam.health_score}</span>
+          <strong style="margin-left:10px;color:var(--accent)">${cam.port}</strong>
+          ${cam.ip_addresses.length ? `<span style="margin-left:10px;font-family:monospace;color:var(--accent2)">${cam.ip_addresses[0]}</span>` : ''}
+        </div>
+        <div><span style="color:${cam.traffic_mbps > 30 ? 'var(--warn)' : 'var(--ok)'}">${cam.traffic_mbps} Mbps</span></div>
+      </div>
+      <div class="traffic-bar" style="margin:8px 0 4px"><div class="traffic-fill" style="width:${Math.min(100, cam.traffic_mbps / 50 * 100)}%"></div></div>
+      <div style="display:flex;gap:15px;font-size:10px;color:var(--dim);flex-wrap:wrap">
+        <span>📭 ${cam.in_errors} errors</span>
+        <span>🔌 ${cam.poe_status === 'on' ? 'PoE OK' : cam.poe_status === 'fault' ? 'PoE Fault' : 'No PoE'}</span>
+        <span>🏭 ${cam.manufacturer}</span>
+        <span>📹 ${cam.estimated_quality}</span>
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('top-cameras').innerHTML = topHtml || '<div class="empty-state">No cameras found</div>';
+  
+  // Silent Cameras (online but no traffic)
+  const silentCams = data.cameras.filter(c => c.status === 'online' && c.traffic_mbps === 0);
+  const silentHtml = silentCams.map(cam => `
+    <div class="camera-card" style="border-left:3px solid var(--warn)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
+        <div><strong style="color:var(--accent)">${cam.port}</strong>
+          ${cam.ip_addresses.length ? `<span style="margin-left:10px;font-family:monospace">${cam.ip_addresses[0]}</span>` : ''}
+        </div>
+        <div><span class="badge warn">⚠ No Traffic</span></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:6px">
+        Camera is online but not sending any data. May be frozen or misconfigured.
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('silent-cameras').innerHTML = silentHtml || '<div class="empty-state">✅ All online cameras are transmitting data</div>';
+  
+  // Quality Insights
+  const qualityStats = { low: 0, med: 0, high: 0 };
+  data.cameras.forEach(c => {
+    if (c.estimated_quality === 'Low') qualityStats.low++;
+    else if (c.estimated_quality === 'Medium') qualityStats.med++;
+    else if (c.estimated_quality === 'High') qualityStats.high++;
+  });
+  
+  const qualityHtml = `
+    <div class="cards-grid" style="margin-bottom:0">
+      <div class="info-card"><div class="ic-label">Low Quality (<2 Mbps)</div><div class="ic-value" style="color:var(--danger)">${qualityStats.low}</div><div class="ic-sub">cameras</div></div>
+      <div class="info-card"><div class="ic-label">Medium Quality (2-5 Mbps)</div><div class="ic-value" style="color:var(--warn)">${qualityStats.med}</div><div class="ic-sub">cameras</div></div>
+      <div class="info-card"><div class="ic-label">High Quality (>5 Mbps)</div><div class="ic-value" style="color:var(--ok)">${qualityStats.high}</div><div class="ic-sub">cameras</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--dim);margin-top:6px">💡 Tip: High traffic >8 Mbps may indicate 4K streaming or network loop</div>
+  `;
+  document.getElementById('quality-insights').innerHTML = qualityHtml;
+  
+  // All Cameras
+  const allHtml = data.cameras.map(cam => `
+    <div class="camera-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><span class="camera-health health-${cam.health_score >= 70 ? 'good' : cam.health_score >= 40 ? 'warning' : 'critical'}">${cam.health_score}</span>
+          <strong style="margin-left:10px;color:var(--accent)">${cam.port}</strong>
+        </div>
+        <div><span style="color:${cam.status === 'online' ? 'var(--ok)' : 'var(--danger)'}">${cam.status.toUpperCase()}</span></div>
+        <div>${cam.traffic_mbps} Mbps</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:15px;margin-top:8px;font-size:10px;color:var(--dim)">
+        <span>📥 ${formatBytes(cam.in_octets)}</span>
+        <span>⚠ ${cam.in_errors + cam.out_errors} errors</span>
+        <span>🔌 ${cam.poe_power_w}W (${cam.poe_status})</span>
+        ${cam.ip_addresses.length ? `<span>🌐 ${cam.ip_addresses.join(', ')}</span>` : ''}
+        <span class="quality-${cam.estimated_quality === 'Low' ? 'low' : cam.estimated_quality === 'Medium' ? 'med' : 'high'}">🎬 ${cam.estimated_quality}</span>
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('all-cameras').innerHTML = allHtml || '<div class="empty-state">No cameras found in VLAN 100</div>';
+  
+  // Issues
+  const issuesHtml = data.issues.map(issue => `
+    <div class="issue-item ${issue.severity}">
+      <div class="issue-sev ${issue.severity}"></div>
+      <div class="issue-body">
+        <div class="issue-msg"><strong>${issue.port}</strong> — ${issue.message}</div>
+        <div class="issue-fix">💡 ${issue.recommendation}</div>
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('issues-list').innerHTML = issuesHtml || '<div class="empty-state">✅ No issues detected</div>';
+  
+  // Predictive Alerts
+  const predictiveCams = data.cameras.filter(cam => cam.predicted_failure_days);
+  const predHtml = predictiveCams.map(cam => `
+    <div class="issue-item critical">
+      <div class="issue-sev critical"></div>
+      <div class="issue-body">
+        <div class="issue-msg"><strong>${cam.port}</strong> — ⚠ Predicted failure in ~${cam.predicted_failure_days} days</div>
+        <div class="issue-fix">🔧 ${cam.predicted_failure_reason || 'CRC errors increasing steadily'}</div>
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('predictive-alerts').innerHTML = predHtml || '<div class="empty-state">✅ No predicted failures in next 7 days</div>';
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '—';
+  if (bytes > 1e9) return (bytes / 1e9).toFixed(1) + 'G';
+  if (bytes > 1e6) return (bytes / 1e6).toFixed(1) + 'M';
+  if (bytes > 1e3) return (bytes / 1e3).toFixed(1) + 'K';
+  return bytes + 'B';
+}
+</script>
+{% endblock %}

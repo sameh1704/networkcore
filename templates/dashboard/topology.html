@@ -1,162 +1,1000 @@
 {% extends "layout/base.html" %}
 
 {% block content %}
-
 <style>
-#topology-container {
-    width: 100%;
-    height: 600px;
-    background: #0f172a;
-    border-radius: 10px;
-    overflow: hidden;
-    position: relative;
+:root {
+    --primary-start: #667eea;
+    --primary-end: #764ba2;
+    --primary-gradient: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+    --secondary: #2d3748;
+    --success: #48bb78;
+    --warning: #ed8936;
+    --danger: #f56565;
+    --dark: #1a202c;
+    --light: #f7fafc;
+    --gray-100: #f8f9fa;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e0;
+    --gray-400: #a0aec0;
+    --gray-500: #718096;
+    --gray-600: #4a5568;
+    --gray-700: #2d3748;
 }
 
-.tooltip {
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Layout */
+.topology-wrapper {
+    padding: 20px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: calc(100vh - 200px);
+}
+
+/* Header Section */
+.topology-header {
+    background: var(--primary-gradient);
+    border-radius: 20px;
+    padding: 30px;
+    margin-bottom: 30px;
+    color: white;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.topology-header::before {
+    content: '';
     position: absolute;
-    background: #111;
-    color: #fff;
-    padding: 6px 10px;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 1%, transparent 1%);
+    background-size: 50px 50px;
+    animation: shimmer 20s linear infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translate(0, 0);
+    }
+    100% {
+        transform: translate(50px, 50px);
+    }
+}
+
+.header-title {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.header-subtitle {
+    opacity: 0.95;
+    font-size: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Locations Cards - تحسين الألوان والوضوح */
+.locations-container {
+    margin-bottom: 30px;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 10px 5px;
+    scrollbar-width: thin;
+}
+
+.locations-grid {
+    display: inline-flex;
+    gap: 15px;
+    padding: 5px;
+}
+
+.location-card {
+    background: white;
+    border-radius: 14px;
+    padding: 18px 28px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid var(--gray-200);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    min-width: 170px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* النص في الحالة العادية - واضح جداً */
+.location-card .location-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-700);
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.location-card .location-stats {
     font-size: 12px;
-    border-radius: 5px;
+    color: var(--gray-500);
+    font-weight: 500;
+    position: relative;
+    z-index: 1;
+}
+
+/* Hover effect */
+.location-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--primary-start);
+    box-shadow: 0 8px 25px rgba(102,126,234,0.2);
+    background: linear-gradient(135deg, #ffffff 0%, #f0f2ff 100%);
+}
+
+.location-card:hover .location-name {
+    color: var(--primary-start);
+}
+
+/* Active card - نشط */
+.location-card.active {
+    background: var(--primary-gradient);
+    border-color: white;
+    box-shadow: 0 8px 25px rgba(102,126,234,0.4);
+}
+
+.location-card.active .location-name {
+    color: white !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.location-card.active .location-stats {
+    color: rgba(255,255,255,0.9) !important;
+}
+
+/* شارة النشط */
+.location-card.active::after {
+    content: '✓';
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    background: rgba(255,255,255,0.3);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+/* Main Content Grid */
+.topology-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+/* Visualization Panel */
+.viz-panel {
+    background: white;
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.viz-panel:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+}
+
+.viz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--gray-200);
+}
+
+.viz-title {
+    font-size: 20px;
+    font-weight: bold;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.viz-stats {
+    display: flex;
+    gap: 20px;
+}
+
+.viz-stat {
+    text-align: center;
+}
+
+.viz-stat-value {
+    font-size: 24px;
+    font-weight: bold;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.viz-stat-label {
+    font-size: 11px;
+    color: var(--gray-500);
+    font-weight: 600;
+}
+
+#topology-canvas {
+    width: 100%;
+    height: 500px;
+    background: linear-gradient(135deg, #fafbfc 0%, #f0f2f5 100%);
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--gray-200);
+}
+
+/* Switches Table Panel */
+.table-panel {
+    background: white;
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.table-panel:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+}
+
+.table-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--gray-200);
+}
+
+.table-title {
+    font-size: 20px;
+    font-weight: bold;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 15px;
+}
+
+.search-box {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.search-box:focus {
+    outline: none;
+    border-color: var(--primary-start);
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+}
+
+.switches-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.switches-table th {
+    text-align: left;
+    padding: 12px;
+    background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+    color: var(--gray-700);
+    font-weight: 700;
+    font-size: 13px;
+    border-bottom: 2px solid var(--gray-200);
+}
+
+.switches-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--gray-200);
+    font-size: 13px;
+    color: var(--gray-600);
+}
+
+.switches-table tbody tr:hover {
+    background: linear-gradient(135deg, #f7fafc 0%, #f0f2ff 100%);
+    transition: background 0.3s ease;
+}
+
+.switch-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 0 0 rgba(72,187,120,0.7);
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(72,187,120,0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(72,187,120,0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(72,187,120,0);
+    }
+}
+
+.cpu-bar {
+    width: 70px;
+    height: 8px;
+    background: var(--gray-200);
+    border-radius: 4px;
+    overflow: hidden;
+    display: inline-block;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.cpu-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success), var(--warning));
+    transition: width 0.3s;
+    border-radius: 4px;
+}
+
+.load-more-btn {
+    width: 100%;
+    padding: 14px;
+    margin-top: 20px;
+    background: var(--primary-gradient);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 14px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.load-more-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+}
+
+.load-more-btn:hover::before {
+    left: 100%;
+}
+
+.load-more-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102,126,234,0.4);
+}
+
+/* Tooltip */
+.glove-tooltip {
+    position: fixed;
+    background: var(--dark);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 12px;
     pointer-events: none;
-    opacity: 0;
+    z-index: 1000;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    max-width: 250px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+    font-weight: 500;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(102,126,234,0.3);
+    border-top-color: var(--primary-start);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .topology-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .location-card {
+        min-width: 140px;
+        padding: 12px 20px;
+    }
+    
+    .location-name {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 768px) {
+    .topology-wrapper {
+        padding: 10px;
+    }
+    
+    .topology-header {
+        padding: 20px;
+    }
+    
+    .header-title {
+        font-size: 24px;
+    }
+    
+    .viz-stats { 
+        gap: 15px; 
+    }
+    
+    .viz-stat-value { 
+        font-size: 18px; 
+    }
+    
+    .switches-table th, 
+    .switches-table td { 
+        padding: 8px; 
+        font-size: 11px; 
+    }
+    
+    .location-card .location-name {
+        font-size: 12px;
+    }
+    
+    .location-card .location-stats {
+        font-size: 10px;
+    }
+}
+
+/* تخصيص شريط التمرير */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--gray-200);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-gradient);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-end);
 }
 </style>
 
-<h2>Network Topology</h2>
+<div class="topology-wrapper">
+    <!-- Header -->
+    <div class="topology-header">
+        <div class="header-title">
+            🌐 منصة مراقبة الشبكات
+        </div>
+        <div class="header-subtitle">
+            Network Topology Dashboard - مراقبة وتصور البنية التحتية للشبكة في الوقت الفعلي
+        </div>
+    </div>
 
-<div id="topology-container">
-    <svg width="100%" height="600"></svg>
-    <div class="tooltip" id="tooltip"></div>
+    <!-- Locations -->
+    <div class="locations-container">
+        <div class="locations-grid" id="locationsGrid">
+            <div class="location-card loading-card">
+                <div class="location-name">📡 جاري التحميل...</div>
+                <div class="location-stats">يرجى الانتظار</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="topology-content">
+        <!-- Visualization Panel -->
+        <div class="viz-panel">
+            <div class="viz-header">
+                <div class="viz-title">🗺️ خريطة الشبكة</div>
+                <div class="viz-stats" id="vizStats">
+                    <div class="viz-stat">
+                        <div class="viz-stat-value" id="vizNodes">0</div>
+                        <div class="viz-stat-label">السويتشات</div>
+                    </div>
+                    <div class="viz-stat">
+                        <div class="viz-stat-value" id="vizLinks">0</div>
+                        <div class="viz-stat-label">الاتصالات</div>
+                    </div>
+                </div>
+            </div>
+            <div id="topology-canvas"></div>
+        </div>
+
+        <!-- Switches Table -->
+        <div class="table-panel">
+            <div class="table-header">
+                <div class="table-title">📋 قائمة السويتشات</div>
+                <input type="text" class="search-box" id="searchSwitch" placeholder="🔍 بحث بالاسم أو IP...">
+            </div>
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table class="switches-table" id="switchesTable">
+                    <thead>
+                        <tr>
+                            <th>الاسم</th>
+                            <th>IP</th>
+                            <th>الموقع</th>
+                            <th>الحالة</th>
+                            <th>المعالج</th>
+                            <th>الموديل</th>
+                        </tr>
+                    </thead>
+                    <tbody id="switchesTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center;">
+                                <div class="loading-spinner"></div>
+                                <div style="margin-top: 10px;">جاري تحميل السويتشات...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <button class="load-more-btn" id="loadMoreBtn" style="display: none;">
+                تحميل المزيد من السويتشات
+            </button>
+        </div>
+    </div>
 </div>
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
-
 <script>
-
-async function loadTopology(){
-
-    const svg = d3.select("svg")
-    svg.selectAll("*").remove()
-
-    let data = await fetch("/api/network-map/").then(r => r.json())
-
-    const width = document.getElementById("topology-container").clientWidth
-    const height = 600
-
-    const tooltip = d3.select("#tooltip")
-
-    // 🔥 تحسين الأداء
-    const simulation = d3.forceSimulation(data.nodes)
-        .force("link", d3.forceLink(data.links).id(d => d.id).distance(120))
-        .force("charge", d3.forceManyBody().strength(-250))
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(60))
-
-    // 🔹 links
-    const link = svg.append("g")
-        .selectAll("line")
-        .data(data.links)
-        .enter()
-        .append("line")
-        .attr("stroke", "#555")
-        .attr("stroke-width", d => d.traffic / 20)
-
-    // 🔹 traffic label
-    const linkLabel = svg.append("g")
-        .selectAll("text")
-        .data(data.links)
-        .enter()
-        .append("text")
-        .text(d => d.traffic + " Mbps")
-        .attr("fill", "#ccc")
-        .attr("font-size", 10)
-
-    // 🔹 nodes group
-    const node = svg.append("g")
-        .selectAll("g")
-        .data(data.nodes)
-        .enter()
-        .append("g")
-        .call(d3.drag()
-            .on("start", dragstarted)
-            .on("drag", dragged)
-            .on("end", dragended)
-        )
-
-    // 🔥 أيقونة Switch SVG
-    node.append("rect")
-        .attr("width", 90)
-        .attr("height", 40)
-        .attr("rx", 8)
-        .attr("fill", d => d.status === "online" ? "#22c55e" : "#ef4444")
-
-    // 🔹 اسم
-    node.append("text")
-        .text(d => d.id)
-        .attr("x", 10)
-        .attr("y", 15)
-        .attr("fill", "white")
-        .attr("font-size", 11)
-
-    // 🔹 IP
-    node.append("text")
-        .text(d => d.ip)
-        .attr("x", 10)
-        .attr("y", 30)
-        .attr("fill", "#ddd")
-        .attr("font-size", 10)
-
-    // 🔥 Tooltip
-    node.on("mouseover", (event, d) => {
-        tooltip.style("opacity", 1)
-            .html(`<b>${d.id}</b><br>${d.ip}<br>Status: ${d.status}`)
-    })
-    .on("mousemove", (event) => {
-        tooltip.style("left", (event.pageX + 10) + "px")
-               .style("top", (event.pageY + 10) + "px")
-    })
-    .on("mouseout", () => {
-        tooltip.style("opacity", 0)
-    })
-
-    simulation.on("tick", () => {
-
-        link
-            .attr("x1", d => d.source.x + 45)
-            .attr("y1", d => d.source.y + 20)
-            .attr("x2", d => d.target.x + 45)
-            .attr("y2", d => d.target.y + 20)
-
-        linkLabel
-            .attr("x", d => (d.source.x + d.target.x) / 2)
-            .attr("y", d => (d.source.y + d.target.y) / 2)
-
-        node
-            .attr("transform", d => `translate(${d.x},${d.y})`)
-    })
-
-    function dragstarted(event, d){
-        if (!event.active) simulation.alphaTarget(0.3).restart()
-        d.fx = d.x
-        d.fy = d.y
+class NetworkTopologyManager {
+    constructor() {
+        this.currentLocation = 'all';
+        this.switchesOffset = 0;
+        this.switchesLimit = 20;
+        this.totalSwitches = 0;
+        this.allSwitches = [];
+        this.links = [];
+        this.svg = null;
+        this.init();
     }
 
-    function dragged(event, d){
-        d.fx = event.x
-        d.fy = event.y
+    async init() {
+        await this.loadLocations();
+        await this.loadSwitches();
+        await this.loadLinks();
+        this.setupEventListeners();
+        this.setupResizeHandler();
     }
 
-    function dragended(event, d){
-        if (!event.active) simulation.alphaTarget(0)
-        d.fx = null
-        d.fy = null
+    async loadLocations() {
+        try {
+            const response = await fetch('/api/locations/');
+            const locations = await response.json();
+            const grid = document.getElementById('locationsGrid');
+            const totalSwitches = locations.reduce((sum, l) => sum + l.switches_count, 0);
+            
+            let html = `
+                <div class="location-card ${this.currentLocation === 'all' ? 'active' : ''}" data-location-id="all">
+                    <div class="location-name">🌍 جميع المواقع</div>
+                    <div class="location-stats">📊 ${totalSwitches} سويتش</div>
+                </div>
+            `;
+            
+            locations.forEach(loc => {
+                const isActive = this.currentLocation == loc.id;
+                html += `
+                    <div class="location-card ${isActive ? 'active' : ''}" data-location-id="${loc.id}">
+                        <div class="location-name">📍 ${this.escapeHtml(loc.name)}</div>
+                        <div class="location-stats">🔌 ${loc.switches_count} سويتش</div>
+                    </div>
+                `;
+            });
+            
+            grid.innerHTML = html;
+            
+            // Add click events
+            document.querySelectorAll('.location-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const locationId = card.getAttribute('data-location-id');
+                    this.switchLocation(locationId);
+                });
+            });
+            
+        } catch (error) {
+            console.error('Error loading locations:', error);
+            document.getElementById('locationsGrid').innerHTML = `
+                <div class="location-card" style="border-color: #f56565;">
+                    <div class="location-name" style="color: #f56565;">❌ خطأ في التحميل</div>
+                    <div class="location-stats">يرجى تحديث الصفحة</div>
+                </div>
+            `;
+        }
+    }
+
+    async loadSwitches(reset = true) {
+        if (reset) {
+            this.switchesOffset = 0;
+            this.allSwitches = [];
+            document.getElementById('switchesTableBody').innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center;">
+                        <div class="loading-spinner"></div>
+                        <div style="margin-top: 10px;">جاري تحميل السويتشات...</div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        try {
+            const url = `/api/switches/?location_id=${this.currentLocation}&offset=${this.switchesOffset}&limit=${this.switchesLimit}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (reset) {
+                this.allSwitches = data.switches;
+                this.totalSwitches = data.total;
+            } else {
+                this.allSwitches = [...this.allSwitches, ...data.switches];
+            }
+            
+            this.renderSwitchesTable();
+            
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            if (data.has_more) {
+                loadMoreBtn.style.display = 'block';
+                loadMoreBtn.innerHTML = `📥 تحميل المزيد (${this.allSwitches.length}/${this.totalSwitches})`;
+            } else {
+                loadMoreBtn.style.display = 'none';
+            }
+            
+            document.getElementById('vizNodes').textContent = this.allSwitches.length;
+        } catch (error) {
+            console.error('Error loading switches:', error);
+            document.getElementById('switchesTableBody').innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; color: #f56565;">
+                        ❌ فشل تحميل السويتشات
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    async loadLinks() {
+        try {
+            const url = `/api/topology-links/?location_id=${this.currentLocation}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            this.links = data.links;
+            document.getElementById('vizLinks').textContent = this.links.length;
+            this.renderTopology();
+        } catch (error) {
+            console.error('Error loading links:', error);
+            document.getElementById('vizLinks').textContent = '0';
+        }
+    }
+
+    renderSwitchesTable() {
+        const searchTerm = document.getElementById('searchSwitch').value.toLowerCase();
+        const filtered = this.allSwitches.filter(sw => 
+            sw.hostname.toLowerCase().includes(searchTerm) || 
+            sw.ip.includes(searchTerm)
+        );
+        
+        const tbody = document.getElementById('switchesTableBody');
+        
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">🔍 لا توجد نتائج مطابقة</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = filtered.map(sw => `
+            <tr>
+                <td><strong>${this.escapeHtml(sw.hostname)}</strong></td>
+                <td>${sw.ip}</td>
+                <td>${this.escapeHtml(sw.location_name)}</td>
+                <td>
+                    <div class="switch-status">
+                        <div class="status-dot"></div>
+                        <span>${sw.status === 'online' ? 'متصل' : 'غير متصل'}</span>
+                    </div>
+                </td>
+                <td>
+                    ${sw.cpu}%
+                    <div class="cpu-bar">
+                        <div class="cpu-fill" style="width: ${sw.cpu}%"></div>
+                    </div>
+                </td>
+                <td>${sw.model || 'N/A'}</td>
+            </tr>
+        `).join('');
+    }
+
+    renderTopology() {
+        const container = document.getElementById('topology-canvas');
+        const width = container.clientWidth;
+        const height = 500;
+        
+        container.innerHTML = '';
+        
+        if (this.allSwitches.length === 0) {
+            container.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 100%; color: #a0aec0; font-size: 16px;">📡 لا توجد سويتشات للعرض</div>';
+            return;
+        }
+        
+        this.svg = d3.select('#topology-canvas')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background', 'linear-gradient(135deg, #fafbfc 0%, #f0f2f5 100%)');
+        
+        const nodes = this.allSwitches.map((sw, index) => ({
+            id: sw.id,
+            name: sw.hostname,
+            ip: sw.ip,
+            cpu: sw.cpu,
+            index: index
+        }));
+        
+        // Position nodes in a circle
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) * 0.35;
+        const angleStep = (2 * Math.PI) / nodes.length;
+        
+        nodes.forEach((node, i) => {
+            node.x = centerX + Math.cos(i * angleStep) * radius;
+            node.y = centerY + Math.sin(i * angleStep) * radius;
+        });
+        
+        // Draw links
+        const links = this.svg.append('g')
+            .selectAll('line')
+            .data(this.links)
+            .enter()
+            .append('line')
+            .attr('stroke', 'url(#linkGradient)')
+            .attr('stroke-width', 2.5)
+            .attr('stroke-dasharray', '6,4')
+            .attr('opacity', 0.7)
+            .attr('x1', d => {
+                const source = nodes.find(n => n.id === d.source);
+                return source ? source.x : 0;
+            })
+            .attr('y1', d => {
+                const source = nodes.find(n => n.id === d.source);
+                return source ? source.y : 0;
+            })
+            .attr('x2', d => {
+                const target = nodes.find(n => n.id === d.target);
+                return target ? target.x : 0;
+            })
+            .attr('y2', d => {
+                const target = nodes.find(n => n.id === d.target);
+                return target ? target.y : 0;
+            });
+        
+        // Defs for gradients
+        const defs = this.svg.append('defs');
+        
+        const linkGradient = defs.append('linearGradient')
+            .attr('id', 'linkGradient')
+            .attr('x1', '0%')
+            .attr('y1', '0%')
+            .attr('x2', '100%')
+            .attr('y2', '100%');
+        linkGradient.append('stop').attr('offset', '0%').attr('style', 'stop-color:#667eea;stop-opacity:1');
+        linkGradient.append('stop').attr('offset', '100%').attr('style', 'stop-color:#764ba2;stop-opacity:1');
+        
+        const nodeGradient = defs.append('radialGradient')
+            .attr('id', 'nodeGradient')
+            .attr('cx', '30%')
+            .attr('cy', '30%');
+        nodeGradient.append('stop').attr('offset', '0%').attr('style', 'stop-color:#8b9cf5;stop-opacity:1');
+        nodeGradient.append('stop').attr('offset', '100%').attr('style', 'stop-color:#5a67d8;stop-opacity:1');
+        
+        // Draw nodes
+        const nodeGroups = this.svg.append('g')
+            .selectAll('g')
+            .data(nodes)
+            .enter()
+            .append('g')
+            .attr('transform', d => `translate(${d.x},${d.y})`)
+            .style('cursor', 'pointer');
+        
+        // Node circles with glow effect
+        nodeGroups.append('circle')
+            .attr('r', 35)
+            .attr('fill', 'url(#nodeGradient)')
+            .attr('stroke', 'white')
+            .attr('stroke-width', 3)
+            .attr('filter', 'url(#glow)');
+        
+        // Glow filter
+        const filter = defs.append('filter')
+            .attr('id', 'glow')
+            .attr('x', '-50%')
+            .attr('y', '-50%')
+            .attr('width', '200%')
+            .attr('height', '200%');
+        filter.append('feGaussianBlur')
+            .attr('stdDeviation', '3')
+            .attr('result', 'coloredBlur');
+        filter.append('feMerge')
+            .selectAll('feMergeNode')
+            .data(['coloredBlur', 'SourceGraphic'])
+            .enter()
+            .append('feMergeNode')
+            .attr('in', d => d);
+        
+        // Network icon inside node
+        nodeGroups.append('rect')
+            .attr('x', -14)
+            .attr('y', -8)
+            .attr('width', 28)
+            .attr('height', 16)
+            .attr('rx', 3)
+            .attr('fill', 'white')
+            .attr('opacity', 0.95);
+        
+        nodeGroups.append('circle')
+            .attr('cx', -7)
+            .attr('cy', 0)
+            .attr('r', 2.5)
+            .attr('fill', '#667eea');
+        
+        nodeGroups.append('circle')
+            .attr('cx', 0)
+            .attr('cy', 0)
+            .attr('r', 2.5)
+            .attr('fill', '#667eea');
+        
+        nodeGroups.append('circle')
+            .attr('cx', 7)
+            .attr('cy', 0)
+            .attr('r', 2.5)
+            .attr('fill', '#667eea');
+        
+        // Labels
+        nodeGroups.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', -42)
+            .attr('fill', '#2d3748')
+            .attr('font-size', '11px')
+            .attr('font-weight', 'bold')
+            .attr('font-family', 'Cairo, sans-serif')
+            .text(d => d.name.length > 12 ? d.name.substring(0, 10) + '...' : d.name);
+        
+        nodeGroups.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', 48)
+            .attr('fill', '#718096')
+            .attr('font-size', '9px')
+            .text(d => `${d.cpu}% CPU`);
+        
+        // Tooltip
+        const tooltip = this.createTooltip();
+        
+        nodeGroups.on('mouseover', (event, d) => {
+            tooltip.style.display = 'block';
+            tooltip.html(`
+                <strong style="color: #667eea;">${d.name}</strong><br/>
+                📍 IP: ${d.ip}<br/>
+                💻 CPU: ${d.cpu}%<br/>
+                ✅ الحالة: متصل<br/>
+                🔗 ${this.links.filter(l => l.source === d.id || l.target === d.id).length} اتصالات
+            `);
+        })
+        .on('mousemove', (event) => {
+            tooltip.style.left = (event.pageX + 15) + 'px';
+            tooltip.style.top = (event.pageY + 15) + 'px';
+        })
+        .on('mouseout', () => {
+            tooltip.style.display = 'none';
+        });
+    }
+    
+    createTooltip() {
+        let tooltip = document.getElementById('network-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'network-tooltip';
+            tooltip.className = 'glove-tooltip';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+        }
+        return d3.select('#network-tooltip');
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    async switchLocation(locationId) {
+        this.currentLocation = locationId;
+        
+        document.querySelectorAll('.location-card').forEach(card => {
+            card.classList.remove('active');
+            if (card.getAttribute('data-location-id') == locationId) {
+                card.classList.add('active');
+            }
+        });
+        
+        await this.loadSwitches(true);
+        await this.loadLinks();
+    }
+    
+    setupEventListeners() {
+        document.getElementById('searchSwitch').addEventListener('input', () => {
+            this.renderSwitchesTable();
+        });
+        
+        document.getElementById('loadMoreBtn').addEventListener('click', () => {
+            this.switchesOffset += this.switchesLimit;
+            this.loadSwitches(false);
+        });
+    }
+    
+    setupResizeHandler() {
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (this.allSwitches.length > 0) {
+                    this.renderTopology();
+                }
+            }, 250);
+        });
     }
 }
 
-loadTopology()
-
+// Initialize on page load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        new NetworkTopologyManager();
+    });
+} else {
+    new NetworkTopologyManager();
+}
 </script>
-
 {% endblock %}

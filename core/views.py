@@ -182,9 +182,38 @@ def switches_page(request):
 
 
 @login_required
-def topology_page(request):
-    """صفحة التوبولوجيا"""
-    return render(request, "dashboard/topology.html")
+def topology_page(request, location_id=None):
+    """صفحة التوبولوجيا المحسنة"""
+    # تحسين استعلام المواقع
+    locations = Location.objects.filter(
+        switch__isnull=False
+    ).annotate(
+        switches_count=Count('switch')
+    ).distinct()
+    
+    current_location = None
+    if location_id:
+        try:
+            current_location = locations.get(id=location_id)
+        except Location.DoesNotExist:
+            pass
+    elif locations.exists():
+        current_location = locations.first()
+    
+    # Pre-fetch أول 10 سويتشات فقط للعرض السريع
+    initial_switches = []
+    if current_location:
+        initial_switches = list(Switch.objects.filter(
+            location=current_location
+        ).values('id', 'hostname', 'ip_address')[:10])
+    
+    context = {
+        'locations': locations,
+        'current_location': current_location,
+        'initial_switches': json.dumps(initial_switches),
+        'location_id': location_id or '',
+    }
+    return render(request, "dashboard/topology.html", context)
 
 
 @login_required
@@ -234,14 +263,190 @@ def dashboard_api(request):
     })
 
 
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse
+from django.core.cache import cache
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.contrib.auth.decorators import login_required
+from .models import Location, Switch
+from .utils import get_switch_basic_info, get_topology_simple
+import json
+from django.db.models import Count, Q
+from django.db import connection
+@api_view(["GET"])
+def locations_api(request):
+    """API سريع للمواقع"""
+    cache_key = "locations_api_data"
+    cached = cache.get(cache_key)
+    
+    if cached:
+        return Response(cached)
+    
+    locations = Location.objects.filter(
+        switch__isnull=False
+    ).annotate(
+        switches_count=Count('switch'),
+        online_count=Count('switch', filter=Q(switch__cpu_usage__isnull=False))
+    ).values('id', 'name', 'switches_count', 'online_count')
+    
+    data = list(locations)
+    cache.set(cache_key, data, timeout=300)  # Cache 5 دقائق
+    return Response(data)
+
+
+
+@api_view(["GET"])
+def switches_api(request):
+    """API مجزأ للسويتشات - تحميل تدريجي"""
+    location_id = request.GET.get('location_id')
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 20))
+    
+    # بناء الاستعلام
+    queryset = Switch.objects.select_related('location')
+    if location_id and location_id != 'all':
+        queryset = queryset.filter(location_id=location_id)
+    
+    # جلب العدد الكلي
+    total = queryset.count()
+    
+    # جلب البيانات المجزأة
+    switches = queryset[offset:offset+limit]
+    
+    # تجهيز البيانات للعرض
+    switches_data = []
+    for sw in switches:
+        switches_data.append({
+            'id': sw.id,
+            'hostname': sw.hostname,
+            'ip': sw.ip_address,
+            'location_name': sw.location.name if sw.location else 'No Location',
+            'status': 'online',
+            'cpu': sw.cpu_usage or 0,
+            'memory': sw.memory_usage or 0,
+            'model': sw.model or 'N/A',
+            'last_seen': sw.last_seen.strftime('%Y-%m-%d %H:%M:%S') if sw.last_seen else 'Never'
+        })
+    
+    return Response({
+        'switches': switches_data,
+        'total': total,
+        'offset': offset,
+        'limit': limit,
+        'has_more': offset + limit < total
+    })
+
+@api_view(["GET"])
+def topology_links_api(request):
+    """API للروابط فقط - يتم تحميلها بشكل منفصل"""
+    location_id = request.GET.get('location_id')
+    
+    cache_key = f"topology_links_{location_id or 'all'}"
+    cached = cache.get(cache_key)
+    
+    if cached:
+        return Response({'links': cached})
+    
+    # جلب السويتشات للموقع
+    if location_id and location_id != 'all':
+        switches = Switch.objects.filter(location_id=location_id)
+    else:
+        switches = Switch.objects.all()
+    
+    # بناء الروابط (يمكن أن يكون ثقيلاً لكنه يحدث مرة واحدة)
+    links = get_topology_simple(switches)
+    
+    # تجهيز الروابط بالـ IDs
+    links_data = []
+    node_map = {sw.hostname: sw.id for sw in switches}
+    
+    for link in links:
+        if link['source'] in node_map and link['target'] in node_map:
+            links_data.append({
+                'source': node_map[link['source']],
+                'target': node_map[link['target']]
+            })
+    
+    cache.set(cache_key, links_data, timeout=300)
+    return Response({'links': links_data})
+
+
+
 @api_view(["GET"])
 def topology_api(request):
-    """API لإنشاء صورة التوبولوجيا"""
-    switches = Switch.objects.all()
-    path = generate_topology(switches)
-    return Response({
-        "topology_image": path
-    })
+    """API محسنة لجلب بيانات التوبولوجيا مع Cache"""
+    loc_id = request.GET.get("location_id")
+    
+    # Cache لمدة 30 ثانية فقط للبيانات الثقيلة
+    cache_key = f"topology_data_{loc_id or 'all'}"
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        return Response(cached_data)
+    
+    # تحسين الاستعلامات باستخدام select_related و prefetch_related
+    if loc_id:
+        switches = Switch.objects.filter(location_id=loc_id).select_related('location')
+    else:
+        switches = Switch.objects.select_related('location').all()
+    
+    # تجهيز البيانات بشكل أخف
+    nodes = []
+    node_ids = set()
+    
+    for sw in switches:
+        nodes.append({
+            "id": sw.id,  # استخدام ID بدلاً من hostname
+            "hostname": sw.hostname,
+            "ip": sw.ip_address,
+            "location_id": sw.location_id,
+            "location_name": sw.location.name if sw.location else "No Location",
+            "status": "online",  # يمكن تعديله حسب حالة الجهاز الفعلية
+            "cpu": random.randint(10, 60),  # مثال مؤقت
+            "memory": random.randint(20, 80)  # مثال مؤقت
+        })
+        node_ids.add(sw.id)
+    
+    # بناء الروابط (تحسين الأداء)
+    links = []
+    link_set = set()
+    
+    for sw in switches:
+        topo = build_topology([sw])
+        for link in topo:
+            src_id = None
+            dst_id = None
+            
+            # البحث عن ID السويتشات
+            for node in nodes:
+                if node["hostname"] == link["source"]:
+                    src_id = node["id"]
+                if node["hostname"] == link["target"]:
+                    dst_id = node["id"]
+            
+            if src_id and dst_id and dst_id in node_ids:
+                key = tuple(sorted([src_id, dst_id]))
+                if key not in link_set:
+                    links.append({
+                        "source": src_id,
+                        "target": dst_id,
+                        "traffic": random.randint(10, 100)
+                    })
+                    link_set.add(key)
+    
+    data = {
+        "nodes": nodes,
+        "links": links,
+        "total_switches": len(nodes),
+        "total_links": len(links)
+    }
+    
+    # تخزين في cache لمدة 30 ثانية
+    cache.set(cache_key, data, timeout=30)
+    return Response(data)
 
 
 @api_view(["GET"])
@@ -250,11 +455,13 @@ def network_map_api(request):
     API لخريطة الشبكة (Nodes + Links)
     مع cache لمدة 30 ثانية
     """
-    cached = cache.get("network_map")
+    loc_id = request.GET.get("location_id")
+    cache_key = f"network_map_{loc_id or 'all'}"
+    cached = cache.get(cache_key)
     if cached:
         return Response(cached)
 
-    switches = Switch.objects.all()
+    switches = Switch.objects.filter(location_id=loc_id) if loc_id else Switch.objects.all()
 
     nodes = []
     links = []
@@ -305,7 +512,7 @@ def network_map_api(request):
             })
 
     data = {"nodes": nodes, "links": links}
-    cache.set("network_map", data, timeout=30)
+    cache.set(cache_key, data, timeout=30)
     return Response(data)
 
 
@@ -1356,3 +1563,206 @@ def api_history_summary(request, switch_id):
             "ok": len([p for p in health if p["severity"] == "ok"]),
         },
     })
+    
+    
+    
+    
+    
+    ######################################################################
+# core/views.py - أضف هذه الدوال في نهاية الملف
+
+# ============================================================
+# 10. Camera VLAN Analysis (VLAN 100 - Cameras)
+# ============================================================
+
+from core.services.camera_vlan_analyzer import analyze_camera_vlan
+
+
+def camera_vlan_page(request):
+    """
+    صفحة تحليل كاميرات VLAN 100
+    """
+    from core.models import Switch, Location
+    
+    locations = Location.objects.annotate(
+        switch_count=Count("switch")
+    ).order_by("name")
+    
+    # جلب جميع السويتشات مع مواقعها للـ JavaScript
+    switches = Switch.objects.select_related("location").order_by("location__name", "hostname")
+    
+    switches_data = []
+    for sw in switches:
+        switches_data.append({
+            "id": sw.id,
+            "hostname": sw.hostname,
+            "ip_address": sw.ip_address,
+            "location_id": sw.location.id if sw.location else None,
+            "location_name": sw.location.name if sw.location else "Unknown",
+        })
+    
+    return render(request, "dashboard/camera_vlan.html", {
+        "locations": locations,
+        "switches": switches,
+        "switches_data": json.dumps(switches_data),
+    })
+
+
+@api_cache(timeout=30)
+def api_camera_vlan_analysis(request, switch_id):
+    """
+    API لتحليل كاميرات VLAN 100
+    
+    GET /api/camera-vlan/<switch_id>/?hours=24
+    
+    Returns:
+        {
+            "switch": {...},
+            "vlan_id": 100,
+            "hours": 24,
+            "cameras": [...],
+            "summary": {...},
+            "top_traffic": [...],
+            "issues": [...]
+        }
+    """
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = int(request.GET.get("hours", 24))
+    
+    try:
+        result = analyze_camera_vlan(sw, hours)
+        return JsonResponse(result)
+    except Exception as e:
+        logger.error(f"Camera VLAN analysis failed for {sw.hostname}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_cache(timeout=60)
+def api_camera_vlan_summary(request):
+    """
+    API لملخص كاميرات VLAN 100 عبر جميع السويتشات
+    
+    GET /api/camera-vlan/summary/
+    
+    Returns:
+        {
+            "total_cameras": 0,
+            "total_switches_with_cameras": 0,
+            "top_locations": [...],
+            "global_issues": [...]
+        }
+    """
+    from core.models import Switch
+    from core.services.camera_vlan_analyzer import analyze_camera_vlan
+    
+    switches = Switch.objects.select_related("location").all()
+    
+    total_cameras = 0
+    total_traffic = 0
+    switches_with_cameras = 0
+    all_issues = []
+    location_stats = {}
+    
+    for sw in switches:
+        try:
+            result = analyze_camera_vlan(sw, hours=24)
+            cameras = result.get("cameras", [])
+            if cameras:
+                switches_with_cameras += 1
+                total_cameras += len(cameras)
+                total_traffic += result.get("summary", {}).get("total_traffic_mbps", 0)
+                
+                # إحصائيات لكل موقع
+                loc_name = sw.location.name if sw.location else "Unknown"
+                if loc_name not in location_stats:
+                    location_stats[loc_name] = {"cameras": 0, "issues": 0}
+                location_stats[loc_name]["cameras"] += len(cameras)
+                
+                # جمع المشاكل
+                for issue in result.get("issues", []):
+                    issue["switch_hostname"] = sw.hostname
+                    issue["location"] = loc_name
+                    all_issues.append(issue)
+                    location_stats[loc_name]["issues"] += 1
+                    
+        except Exception as e:
+            logger.error(f"Summary failed for {sw.hostname}: {e}")
+    
+    # ترتيب المواقع حسب عدد الكاميرات
+    top_locations = sorted(
+        [{"name": k, "cameras": v["cameras"], "issues": v["issues"]} 
+         for k, v in location_stats.items()],
+        key=lambda x: x["cameras"],
+        reverse=True
+    )[:5]
+    
+    return JsonResponse({
+        "total_cameras": total_cameras,
+        "total_switches_with_cameras": switches_with_cameras,
+        "total_traffic_mbps": round(total_traffic, 1),
+        "top_locations": top_locations,
+        "global_issues": all_issues[:20],  # آخر 20 مشكلة
+        "generated_at": timezone.now().isoformat(),
+    })
+
+
+@api_cache(timeout=30)
+def api_camera_vlan_export(request, switch_id):
+    """
+    تصدير بيانات كاميرات VLAN 100 بصيغة CSV
+    
+    GET /api/camera-vlan/export/<switch_id>/
+    """
+    import csv
+    from django.http import HttpResponse
+    
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = int(request.GET.get("hours", 24))
+    
+    result = analyze_camera_vlan(sw, hours)
+    cameras = result.get("cameras", [])
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="camera_vlan_{sw.hostname}_{timezone.now().date()}.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Port', 'Status', 'Health Score', 'Traffic (Mbps)', 
+                     'In Errors', 'Out Errors', 'PoE Status', 'PoE Power (W)',
+                     'IP Addresses', 'Manufacturer', 'Last Seen'])
+    
+    for cam in cameras:
+        writer.writerow([
+            cam.get('port', ''),
+            cam.get('status', ''),
+            cam.get('health_score', 0),
+            cam.get('traffic_mbps', 0),
+            cam.get('in_errors', 0),
+            cam.get('out_errors', 0),
+            cam.get('poe_status', ''),
+            cam.get('poe_power_w', 0),
+            ', '.join(cam.get('ip_addresses', [])),
+            cam.get('manufacturer', ''),
+            cam.get('last_seen', ''),
+        ])
+    
+    return response
+
+
+
+from core.services.camera_vlan_analyzer import analyze_camera_vlan
+
+@api_cache(timeout=30)
+def api_camera_vlan_analysis(request, switch_id):
+    """
+    API لتحليل كاميرات VLAN 100
+    
+    GET /api/camera-vlan/<switch_id>/?hours=24
+    """
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = int(request.GET.get("hours", 24))
+    
+    try:
+        result = analyze_camera_vlan(sw, hours)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

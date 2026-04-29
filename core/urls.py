@@ -238,16 +238,19 @@ urlpatterns += [
     # 8. Camera VLAN Analysis (صفحة مستقلة)
     # ============================================================
     
-    # صفحة تحليل كاميرات VLAN 100
+
+
+# core/urls.py - أضف هذه المسارات
+
+    
+    # Camera VLAN Analysis
     path("camera-vlan/", views.camera_vlan_page, name="camera_vlan_page"),
-    
-    # API لتحليل كاميرات سويتش معين
-    path("api/camera-vlan/<int:switch_id>/", views.api_camera_vlan_analysis, name="api_camera_vlan_analysis"),
-    
-    # API لملخص عام (اختياري)
-    path("api/camera-vlan/summary/", views.api_camera_vlan_summary, name="api_camera_vlan_summary"),
-    
-    # API لتصدير البيانات (اختياري)
-    path("api/camera-vlan/export/<int:switch_id>/", views.api_camera_vlan_export, name="api_camera_vlan_export"),
+    path("camera/api/analysis/<int:switch_id>/", views.api_camera_analysis, name="api_camera_analysis"),
+    path("camera/api/summary/", views.api_camera_summary, name="api_camera_summary"),
+    path("camera/api/export/<int:switch_id>/", views.api_camera_export_csv, name="api_camera_export"),
+    path("camera/api/export-identities/<int:switch_id>/", views.api_camera_identity_export_csv, name="api_camera_identity_export"),
+    path("camera/api/refresh/<int:switch_id>/", views.api_camera_refresh, name="api_camera_refresh"),
+
+
 
 ]

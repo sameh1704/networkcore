@@ -1,4 +1,6 @@
 # utils.py - إضافة وظائف محسنة
+import random
+
 from django.core.cache import cache
 from netmiko import ConnectHandler
 import time

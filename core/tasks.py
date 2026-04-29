@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.db import connection
 from datetime import timedelta
 import shutil
-
+from django.conf import settings
 from core.models import Switch
 from core.services.monitoring import get_cpu_usage
 from core.services.ai_engine import analyze_network
@@ -19,7 +19,7 @@ log = get_task_logger(__name__)
 # ═══════════════════════════════════════════════════════════
 #  إعدادات إدارة المساحة (قابلة للتعديل)
 # ═══════════════════════════════════════════════════════════
-from django.conf import settings
+
 
 # مراحل التخفيف
 SNAPSHOT_FULL_HOURS   = getattr(settings, 'PORT_HISTORY_FULL_HOURS', 6)      # 6 ساعات تفصيل كامل

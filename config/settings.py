@@ -3,6 +3,7 @@ Django settings for config project.
 Compatible with Docker + Celery + Redis + Channels + Port History
 """
 
+import os
 from pathlib import Path
 from celery.schedules import crontab
 
@@ -100,6 +101,21 @@ DATABASES = {
         'PASSWORD': 'nms123',
         'HOST': 'postgres',
         'PORT': 5432,
+    }
+}
+
+
+# ============================================================
+# CACHE (Redis in Docker, LocMem fallback locally)
+# ============================================================
+REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://redis:6379/1")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+        "TIMEOUT": 300,
+        "KEY_PREFIX": "nms",
     }
 }
 

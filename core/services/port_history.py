@@ -526,21 +526,22 @@ def get_flap_report(switch: Switch, hours: int = 24) -> list:
     """تقرير المنافذ الأكثر flap مرتبة تنازلياً."""
     since = timezone.now() - timedelta(hours=hours)
 
-    # استخدام جدول PortEvent كمصدر أساسي لضمان دقة التقارير التاريخية
-    event_stats = (
-        PortEvent.objects
-        .filter(switch=switch, event_type="link_down", occurred_at__gte=since)
+    rows = (
+        PortFlapCounter.objects
+        .filter(switch=switch, window_start__gte=since)
         .values("port_name")
         .annotate(
-            total_flaps=Count("id"),
-            total_downs=Count("id"),
-            last_flap=Max("occurred_at")
+            total_flaps=Sum("flap_count"),
+            total_downs=Sum("down_count"),
+            windows=Count("id"),
         )
         .order_by("-total_flaps")
     )
 
     result = []
-    for r in event_stats:
+    for r in rows:
+        if r["total_flaps"] == 0:
+            continue
         severity = (
             "critical" if r["total_flaps"] >= FLAP_CRITICAL else
             "warning" if r["total_flaps"] >= FLAP_THRESHOLD else
@@ -548,10 +549,7 @@ def get_flap_report(switch: Switch, hours: int = 24) -> list:
         )
         hourly_rate = r["total_flaps"] / max(hours, 1)
         result.append({
-            "port_name": r["port_name"],
-            "total_flaps": r["total_flaps"],
-            "total_downs": r["total_downs"],
-            "last_flap": r["last_flap"],
+            **r,
             "severity": severity,
             "hourly_rate": round(hourly_rate, 2),
             "diagnosis": _diagnose_flap(r["total_flaps"], hourly_rate),
@@ -1097,5 +1095,3 @@ def get_history_summary(switch: Switch, hours: int = 24) -> dict:
             "ok": len([p for p in health if p["severity"] == "ok"]),
         },
     }
-    
-    

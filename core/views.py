@@ -25,17 +25,24 @@ import subprocess
 import platform
 from functools import wraps
 from datetime import timedelta
-
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
 from django.core.cache import cache
 from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.contrib.auth.decorators import login_required
+from .models import Location, Switch
+from .utils import get_switch_basic_info, get_topology_simple
+from django.db import connection
+import csv
+from django.http         import JsonResponse, HttpResponse
+
+from django.core.cache   import cache
+from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
+from django.utils import timezone
 
 # Models
 from core.models import Switch, Interface, Location
@@ -263,19 +270,8 @@ def dashboard_api(request):
     })
 
 
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
-from django.core.cache import cache
-from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_headers
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from django.contrib.auth.decorators import login_required
-from .models import Location, Switch
-from .utils import get_switch_basic_info, get_topology_simple
-import json
-from django.db.models import Count, Q
-from django.db import connection
+
+
 @api_view(["GET"])
 def locations_api(request):
     """API سريع للمواقع"""
@@ -1567,202 +1563,258 @@ def api_history_summary(request, switch_id):
     
     
     
-    
-    ######################################################################
-# core/views.py - أضف هذه الدوال في نهاية الملف
+  
 
 # ============================================================
 # 10. Camera VLAN Analysis (VLAN 100 - Cameras)
 # ============================================================
 
-from core.services.camera_vlan_analyzer import analyze_camera_vlan
 
 
+
+
+from core.models         import Switch, Location
+from core.services.camera_vlan_analyzer import (
+    analyze_camera_vlan,
+    get_global_camera_summary,
+    invalidate_camera_cache,
+)
+
+log = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────
+#  Helper decorator — SNMP مع timeout ورد آمن
+# ─────────────────────────────────────────────────────────────
+def safe_json(view_func):
+    """يلتقط أي استثناء ويُعيد JSON خطأ بدلاً من crash."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        try:
+            return view_func(request, *args, **kwargs)
+        except Exception as e:
+            log.error(f"View error [{view_func.__name__}]: {e}", exc_info=True)
+            return JsonResponse({"error": str(e)}, status=500)
+    return wrapper
+
+
+# ─────────────────────────────────────────────────────────────
+#  1. صفحة HTML الرئيسية
+# ─────────────────────────────────────────────────────────────
 def camera_vlan_page(request):
-    """
-    صفحة تحليل كاميرات VLAN 100
-    """
-    from core.models import Switch, Location
-    
+    """صفحة تحليل كاميرات VLAN 100"""
     locations = Location.objects.annotate(
         switch_count=Count("switch")
     ).order_by("name")
-    
-    # جلب جميع السويتشات مع مواقعها للـ JavaScript
-    switches = Switch.objects.select_related("location").order_by("location__name", "hostname")
-    
-    switches_data = []
-    for sw in switches:
-        switches_data.append({
-            "id": sw.id,
-            "hostname": sw.hostname,
-            "ip_address": sw.ip_address,
-            "location_id": sw.location.id if sw.location else None,
+
+    switches = (
+        Switch.objects
+        .select_related("location")
+        .only("id", "hostname", "ip_address", "location_id", "location__name")
+        .order_by("location__name", "hostname")
+    )
+
+    switches_data = [
+        {
+            "id":            sw.id,
+            "hostname":      sw.hostname,
+            "ip_address":    sw.ip_address,
+            "location_id":   sw.location_id,
             "location_name": sw.location.name if sw.location else "Unknown",
-        })
-    
+        }
+        for sw in switches
+    ]
+
     return render(request, "dashboard/camera_vlan.html", {
-        "locations": locations,
-        "switches": switches,
-        "switches_data": json.dumps(switches_data),
+        "locations":     locations,
+        "switches":      switches,
+        "switches_json": json.dumps(switches_data),
     })
 
 
-@api_cache(timeout=30)
-def api_camera_vlan_analysis(request, switch_id):
+# ─────────────────────────────────────────────────────────────
+#  2. API — تحليل سويتش واحد
+# ─────────────────────────────────────────────────────────────
+@require_GET
+@safe_json
+def api_camera_analysis(request, switch_id):
     """
-    API لتحليل كاميرات VLAN 100
-    
-    GET /api/camera-vlan/<switch_id>/?hours=24
-    
-    Returns:
-        {
-            "switch": {...},
-            "vlan_id": 100,
-            "hours": 24,
-            "cameras": [...],
-            "summary": {...},
-            "top_traffic": [...],
-            "issues": [...]
-        }
+    GET /camera/api/analysis/<switch_id>/
+    يُعيد نتيجة analyze_camera_vlan من cache أو يُشغِّل التحليل.
     """
-    sw = get_object_or_404(Switch, id=switch_id)
-    hours = int(request.GET.get("hours", 24))
-    
-    try:
-        result = analyze_camera_vlan(sw, hours)
-        return JsonResponse(result)
-    except Exception as e:
-        logger.error(f"Camera VLAN analysis failed for {sw.hostname}: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@api_cache(timeout=60)
-def api_camera_vlan_summary(request):
-    """
-    API لملخص كاميرات VLAN 100 عبر جميع السويتشات
-    
-    GET /api/camera-vlan/summary/
-    
-    Returns:
-        {
-            "total_cameras": 0,
-            "total_switches_with_cameras": 0,
-            "top_locations": [...],
-            "global_issues": [...]
-        }
-    """
-    from core.models import Switch
-    from core.services.camera_vlan_analyzer import analyze_camera_vlan
-    
-    switches = Switch.objects.select_related("location").all()
-    
-    total_cameras = 0
-    total_traffic = 0
-    switches_with_cameras = 0
-    all_issues = []
-    location_stats = {}
-    
-    for sw in switches:
-        try:
-            result = analyze_camera_vlan(sw, hours=24)
-            cameras = result.get("cameras", [])
-            if cameras:
-                switches_with_cameras += 1
-                total_cameras += len(cameras)
-                total_traffic += result.get("summary", {}).get("total_traffic_mbps", 0)
-                
-                # إحصائيات لكل موقع
-                loc_name = sw.location.name if sw.location else "Unknown"
-                if loc_name not in location_stats:
-                    location_stats[loc_name] = {"cameras": 0, "issues": 0}
-                location_stats[loc_name]["cameras"] += len(cameras)
-                
-                # جمع المشاكل
-                for issue in result.get("issues", []):
-                    issue["switch_hostname"] = sw.hostname
-                    issue["location"] = loc_name
-                    all_issues.append(issue)
-                    location_stats[loc_name]["issues"] += 1
-                    
-        except Exception as e:
-            logger.error(f"Summary failed for {sw.hostname}: {e}")
-    
-    # ترتيب المواقع حسب عدد الكاميرات
-    top_locations = sorted(
-        [{"name": k, "cameras": v["cameras"], "issues": v["issues"]} 
-         for k, v in location_stats.items()],
-        key=lambda x: x["cameras"],
-        reverse=True
-    )[:5]
-    
-    return JsonResponse({
-        "total_cameras": total_cameras,
-        "total_switches_with_cameras": switches_with_cameras,
-        "total_traffic_mbps": round(total_traffic, 1),
-        "top_locations": top_locations,
-        "global_issues": all_issues[:20],  # آخر 20 مشكلة
-        "generated_at": timezone.now().isoformat(),
-    })
-
-
-@api_cache(timeout=30)
-def api_camera_vlan_export(request, switch_id):
-    """
-    تصدير بيانات كاميرات VLAN 100 بصيغة CSV
-    
-    GET /api/camera-vlan/export/<switch_id>/
-    """
-    import csv
-    from django.http import HttpResponse
-    
-    sw = get_object_or_404(Switch, id=switch_id)
-    hours = int(request.GET.get("hours", 24))
-    
+    sw     = get_object_or_404(Switch, id=switch_id)
+    hours  = _safe_hours_param(request.GET.get("hours", 24))
     result = analyze_camera_vlan(sw, hours)
+    compact = request.GET.get("compact", "1") != "0"
+    payload = _serialize_camera_analysis(result, compact=compact)
+    return JsonResponse(payload)
+
+
+# ─────────────────────────────────────────────────────────────
+#  3. API — ملخص عام (يقرأ من cache فقط)
+# ─────────────────────────────────────────────────────────────
+@require_GET
+@safe_json
+def api_camera_summary(request):
+    """
+    GET /camera/api/summary/
+    ملخص خفيف — لا يُشغِّل SNMP، يقرأ cache فقط.
+    """
+    summary = get_global_camera_summary()
+    return JsonResponse(summary)
+
+
+# ─────────────────────────────────────────────────────────────
+#  4. API — تصدير CSV
+# ─────────────────────────────────────────────────────────────
+@require_GET
+@safe_json
+def api_camera_export_csv(request, switch_id):
+    """
+    GET /camera/api/export/<switch_id>/
+    """
+    sw     = get_object_or_404(Switch, id=switch_id)
+    result = analyze_camera_vlan(sw)
     cameras = result.get("cameras", [])
-    
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="camera_vlan_{sw.hostname}_{timezone.now().date()}.csv"'
-    
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    filename = f"cameras_{sw.hostname}_{timezone.now().date()}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
     writer = csv.writer(response)
-    writer.writerow(['Port', 'Status', 'Health Score', 'Traffic (Mbps)', 
-                     'In Errors', 'Out Errors', 'PoE Status', 'PoE Power (W)',
-                     'IP Addresses', 'Manufacturer', 'Last Seen'])
-    
-    for cam in cameras:
+    writer.writerow([
+        "Port", "Status", "Health Score", "Traffic Mbps",
+        "Quality", "In Errors", "Drops", "PoE Status", "PoE W",
+        "MAC", "IP", "Manufacturer", "Speed",
+    ])
+    for c in cameras:
         writer.writerow([
-            cam.get('port', ''),
-            cam.get('status', ''),
-            cam.get('health_score', 0),
-            cam.get('traffic_mbps', 0),
-            cam.get('in_errors', 0),
-            cam.get('out_errors', 0),
-            cam.get('poe_status', ''),
-            cam.get('poe_power_w', 0),
-            ', '.join(cam.get('ip_addresses', [])),
-            cam.get('manufacturer', ''),
-            cam.get('last_seen', ''),
+            c["port"],             c["status"],
+            c["health_score"],     c["traffic_mbps"],
+            c["estimated_quality"],c["in_errors"],
+            c["in_discards"],      c["poe_status"],
+            c["poe_power_w"],
+            ", ".join(c["mac_addresses"]),
+            ", ".join(c["ip_addresses"]),
+            c["manufacturer"],     c["speed"],
         ])
-    
     return response
 
 
-
-from core.services.camera_vlan_analyzer import analyze_camera_vlan
-
-@api_cache(timeout=30)
-def api_camera_vlan_analysis(request, switch_id):
+@require_GET
+@safe_json
+def api_camera_identity_export_csv(request, switch_id):
     """
-    API لتحليل كاميرات VLAN 100
-    
-    GET /api/camera-vlan/<switch_id>/?hours=24
+    GET /camera/api/export-identities/<switch_id>/
     """
     sw = get_object_or_404(Switch, id=switch_id)
-    hours = int(request.GET.get("hours", 24))
-    
+    hours = _safe_hours_param(request.GET.get("hours", 24))
+    result = analyze_camera_vlan(sw, hours)
+    cameras = result.get("cameras", [])
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    filename = f"camera_identities_{sw.hostname}_{timezone.now().date()}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(["Port", "MAC", "IP", "Manufacturer"])
+    for c in cameras:
+        writer.writerow([
+            c["port"],
+            ", ".join(c.get("mac_addresses", [])),
+            ", ".join(c.get("ip_addresses", [])),
+            c.get("manufacturer", ""),
+        ])
+    return response
+
+
+# ─────────────────────────────────────────────────────────────
+#  5. API — إبطال cache وإعادة التحليل
+# ─────────────────────────────────────────────────────────────
+@require_GET
+@safe_json
+def api_camera_refresh(request, switch_id):
+    """
+    GET /camera/api/refresh/<switch_id>/
+    يحذف الـ cache ويُشغِّل التحليل من جديد.
+    """
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = _safe_hours_param(request.GET.get("hours", 24))
+    _clear_switch_runtime_caches(sw.ip_address)
+    invalidate_camera_cache(sw.id, hours)
+    result = analyze_camera_vlan(sw, hours)
+    compact = request.GET.get("compact", "1") != "0"
+    payload = _serialize_camera_analysis(result, compact=compact)
+    return JsonResponse(payload)
+
+
+def _serialize_camera_analysis(result: dict, compact: bool = True) -> dict:
+    if not compact:
+        return result
+
+    cameras = [
+        {
+            "port": c.get("port"),
+            "status": c.get("status"),
+            "health_score": c.get("health_score"),
+            "traffic_mbps": c.get("traffic_mbps"),
+            "in_errors": c.get("in_errors"),
+            "in_discards": c.get("in_discards"),
+            "speed": c.get("speed"),
+            "poe_status": c.get("poe_status"),
+            "poe_power_w": c.get("poe_power_w"),
+            "mac_addresses": c.get("mac_addresses", []),
+            "ip_addresses": c.get("ip_addresses", []),
+            "manufacturer": c.get("manufacturer"),
+            "estimated_quality": c.get("estimated_quality"),
+        }
+        for c in result.get("cameras", [])
+    ]
+
+    issues = [
+        {
+            "severity": issue.get("severity"),
+            "port": issue.get("port"),
+            "message": issue.get("message"),
+            "recommendation": issue.get("recommendation"),
+        }
+        for issue in result.get("issues", [])[:25]
+    ]
+
+    return {
+        "switch": result.get("switch", {}),
+        "vlan_id": result.get("vlan_id", 100),
+        "hours": result.get("hours", 24),
+        "summary": result.get("summary", {}),
+        "diagnostics": result.get("diagnostics", {}),
+        "cameras": cameras,
+        "issues": issues,
+        "port_count": result.get("port_count", len(cameras)),
+        "from_cache": result.get("from_cache", False),
+        "generated_at": result.get("generated_at"),
+        "error": result.get("error"),
+    }
+
+
+def _safe_hours_param(raw_value, default: int = 24) -> int:
     try:
-        result = analyze_camera_vlan(sw, hours)
-        return JsonResponse(result)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+        hours = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return hours if hours in {1, 6, 12, 24, 48, 168} else default
+
+
+def _clear_switch_runtime_caches(ip_address: str) -> None:
+    try:
+        from core.services.switch_inspector import _CACHE
+        keys_to_delete = [key for key in _CACHE if ip_address in key]
+        for key in keys_to_delete:
+            _CACHE.pop(key, None)
+    except Exception:
+        pass
+
+    try:
+        from core.services.snmp import clear_cache
+        clear_cache(ip_address)
+    except Exception:
+        pass

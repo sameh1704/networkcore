@@ -1,7 +1,6 @@
 from django.db import models
 
-# Create your models here.
-from django.db import models
+
 
 
 
@@ -303,5 +302,4 @@ class PortFlapCounter(models.Model):
     class Meta:
         unique_together = ["switch", "port_name", "window_start"]
         ordering = ["-window_start"]
-
 

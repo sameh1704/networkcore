@@ -379,6 +379,34 @@ def get_vlans_full(ip, community):
         if port_name and PHYSICAL_RE.match(port_name):
             vlan_ports.setdefault(vid, []).append(port_name)
 
+    # ── 2b. IEEE/Q-BRIDGE fallback: VLAN → port bitmap ─────
+    # بعض السويتشات لا تُظهر منافذ VLAN 100 عبر vmVlan بشكل موثوق،
+    # لذا نفكك الـ bitmap ونحوّل bridge-port → ifIndex → port name.
+    if not vlan_ports:
+        bp_ifidx_raw = snmp_walk_with_index(
+            ip, community, OID_DOT1D_BASE_PORT_IFINDEX
+        ) or []
+        bp2ifidx = {}
+        for suffix, ifidx_val in bp_ifidx_raw:
+            bp = suffix.split(".")[-1]
+            bp2ifidx[bp] = _i(ifidx_val)
+
+        vlan_bitmap_idx = snmp_walk_with_index(
+            ip, community, OID_VLAN_UNTAGGED
+        ) or []
+
+        for suffix, bitmap_raw in vlan_bitmap_idx:
+            vid = _last_idx(suffix)
+            if not (1 <= vid <= 4094):
+                continue
+            for bp in _decode_port_bitmap(bitmap_raw):
+                ifidx = bp2ifidx.get(str(bp))
+                if not ifidx:
+                    continue
+                port_name = ifidx2name.get(str(ifidx), "")
+                if port_name and PHYSICAL_RE.match(port_name):
+                    vlan_ports.setdefault(vid, []).append(port_name)
+
     # ── 3. VLAN_NAMES مع VLAN_ID الحقيقي ────────────────
     vlan_name_idx  = snmp_walk_with_index(
         ip, community, OID_VLAN_NAMES_VTP
@@ -395,6 +423,15 @@ def get_vlans_full(ip, community):
         if vid and 1 <= vid <= 4094:
             vlan_names[vid] = str(val).strip() or f"VLAN{vid}"
 
+    if not vlan_names:
+        vlan_name_idx = snmp_walk_with_index(
+            ip, community, OID_VLAN_NAMES_IEEE
+        ) or []
+        for suffix, val in vlan_name_idx:
+            vid = _last_idx(suffix)
+            if vid and 1 <= vid <= 4094:
+                vlan_names[vid] = str(val).strip() or f"VLAN{vid}"
+
     for suffix, val in vlan_state_idx:
         vid = _last_idx(suffix)
         if vid:
@@ -402,10 +439,11 @@ def get_vlans_full(ip, community):
 
     # ── 4. القائمة النهائية ──────────────────────────────
     result = []
-    for vid in sorted(vlan_names.keys()):
-        name       = vlan_names[vid]
+    all_vlan_ids = sorted(set(vlan_names.keys()) | set(vlan_ports.keys()))
+    for vid in all_vlan_ids:
+        name       = vlan_names.get(vid, f"VLAN{vid}")
         active     = vlan_states.get(vid, False)
-        port_names = vlan_ports.get(vid, [])
+        port_names = sorted(set(vlan_ports.get(vid, [])))
         result.append({
             "vlan_id"   : vid,
             "name"      : name,
@@ -428,6 +466,44 @@ def _last_idx(suffix: str) -> int:
         except ValueError:
             continue
     return 0 
+
+
+def _decode_port_bitmap(raw) -> list[int]:
+    """
+    يفكك Q-BRIDGE port bitmap إلى أرقام bridge ports (1-based).
+    يدعم 0xHEX, dot notation, bytes النصية, و OctetString المطبوعة.
+    """
+    if raw is None:
+        return []
+
+    s = str(raw).strip()
+    data = b""
+
+    if s.lower().startswith("0x"):
+        hex_str = re.sub(r'[^0-9a-fA-F]', '', s[2:])
+        if len(hex_str) % 2 == 1:
+            hex_str = "0" + hex_str
+        try:
+            data = bytes.fromhex(hex_str)
+        except ValueError:
+            data = b""
+    elif "." in s and all(p.isdigit() for p in s.split(".")):
+        try:
+            data = bytes(int(p) for p in s.split(".") if 0 <= int(p) <= 255)
+        except Exception:
+            data = b""
+    else:
+        try:
+            data = s.encode("latin-1", errors="ignore")
+        except Exception:
+            data = b""
+
+    ports = []
+    for byte_index, byte_val in enumerate(data):
+        for bit in range(8):
+            if byte_val & (1 << (7 - bit)):
+                ports.append(byte_index * 8 + bit + 1)
+    return ports
 
 # ═══════════════════════════════════════════════════════
 #  5. IP Interface Brief
@@ -1094,7 +1170,5 @@ def get_stp_info(ip, community):
     }
     _cache_set(key, result, ttl=60)
     return result
-
-
 
 

@@ -1,318 +1,861 @@
-<!-- templates/dashboard/camera_vlan.html -->
 {% extends "layout/base.html" %}
 {% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-.camera-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 8px;
-  transition: all 0.2s;
+:root{
+  --bg:#060b14;--bg2:#0a1220;--bg3:#0f1a2e;--border:#1a2d4a;
+  --accent:#00d4ff;--accent2:#00ff9d;--warn:#ffb800;--danger:#ff3860;
+  --ok:#00e676;--text:#c8dff5;--dim:#4a6a8a;
+  --mono:'Share Tech Mono',monospace;--sans:'Exo 2',sans-serif;
 }
-.camera-card:hover { border-color: var(--accent); }
-.camera-health {
-  display: inline-block;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  text-align: center;
-  line-height: 28px;
-  font-size: 12px;
-  font-weight: bold;
+body.light{--bg:#f0f4fa;--bg2:#fff;--bg3:#e8eef8;--border:#c8d8ec;
+  --accent:#0066cc;--accent2:#00956e;--warn:#d68000;--danger:#cc2244;
+  --ok:#118844;--text:#1a2530;--dim:#5a7080;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body,#main-content,.content{background:var(--bg)!important;color:var(--text);font-family:var(--sans);}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pulse-ok{0%,100%{box-shadow:0 0 0 0 #00e67640}50%{box-shadow:0 0 0 5px transparent}}
+
+/* ── HEADER ── */
+.noc-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:200;flex-wrap:wrap;}
+.noc-logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-decoration:none;}
+.noc-logo em{color:var(--accent2);font-style:normal;}
+.page-pill{font-family:var(--mono);font-size:12px;color:var(--accent);
+  padding:3px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--bg3);}
+.hdr-r{display:flex;gap:7px;align-items:center;flex-wrap:wrap;}
+.hbtn{padding:3px 9px;border:1px solid var(--border);border-radius:5px;
+  background:var(--bg3);color:var(--dim);font-size:10px;cursor:pointer;font-family:var(--mono);
+  text-decoration:none;transition:border-color .15s,color .15s;}
+.hbtn:hover{border-color:var(--accent);color:var(--accent);}
+.noc-clock{font-family:var(--mono);font-size:11px;color:var(--dim);}
+
+/* ── CONTROLS ── */
+.ctrl{display:flex;align-items:center;gap:10px;padding:10px 20px;
+  background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.sel{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 10px;
+  cursor:pointer;outline:none;transition:border-color .2s;}
+.sel:focus{border-color:var(--accent);}
+.run-btn{padding:6px 16px;background:var(--accent);border:none;border-radius:6px;
+  color:#000;font-family:var(--mono);font-size:11px;cursor:pointer;font-weight:700;
+  transition:opacity .2s;}
+.run-btn:hover{opacity:.85;}
+.run-btn:disabled{opacity:.4;cursor:not-allowed;}
+.refresh-btn{padding:6px 14px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;color:var(--accent);font-family:var(--mono);font-size:11px;
+  cursor:pointer;transition:border-color .15s;}
+.refresh-btn:hover{border-color:var(--accent);}
+.export-btn{padding:6px 14px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;color:var(--accent2);font-family:var(--mono);font-size:11px;
+  cursor:pointer;text-decoration:none;}
+.ctrl-sep{width:1px;height:24px;background:var(--border);}
+.cache-badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:8px;
+  background:#00d4ff12;color:var(--dim);border:1px solid #00d4ff20;}
+
+/* ── SUMMARY CARDS ── */
+.sum-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+  gap:8px;padding:12px 20px;}
+.sc{background:var(--bg2);border:1px solid var(--border);border-radius:9px;
+  padding:11px 12px;text-align:center;}
+.sc .v{font-family:var(--mono);font-size:24px;font-weight:700;line-height:1.1;}
+.sc .l{font-size:8px;color:var(--dim);margin-top:2px;text-transform:uppercase;letter-spacing:1px;}
+.sc.c-ok .v  {color:var(--ok);}
+.sc.c-warn .v{color:var(--warn);}
+.sc.c-crit .v{color:var(--danger);}
+.sc.c-info .v{color:var(--accent);}
+.sc.c-a2 .v  {color:var(--accent2);}
+.diag-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:0 20px 14px;}
+.diag-card{background:var(--bg2);border:1px dashed var(--border);border-radius:9px;padding:10px 12px;}
+.diag-card .k{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;}
+.diag-card .v{font-family:var(--mono);font-size:18px;color:var(--accent);margin-top:4px;}
+
+/* ── SECTION TITLE ── */
+.st{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:2px;padding:10px 20px 6px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;}
+.st::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── ISSUES PANEL ── */
+#issues-panel{padding:0 20px 14px;}
+.issue-row{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:7px;
+  margin-bottom:5px;animation:fadeIn .3s ease;}
+.issue-row.critical{border-left:3px solid var(--danger);}
+.issue-row.warning {border-left:3px solid var(--warn);}
+.issue-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.issue-dot.critical{background:var(--danger);}
+.issue-dot.warning {background:var(--warn);}
+.issue-msg{font-size:11px;flex:1;}
+.issue-rec{font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px;}
+
+/* ── CAMERA GRID ── */
+#cam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:10px;padding:0 20px 14px;}
+.cam-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;position:relative;animation:fadeIn .3s ease;
+  transition:border-color .15s,box-shadow .15s,transform .15s;}
+.cam-card:hover{border-color:var(--accent);box-shadow:0 0 14px #00d4ff14;transform:translateY(-2px);}
+.cam-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.cam-card.online::before {background:var(--ok);}
+.cam-card.offline::before{background:var(--danger);}
+.cam-card.silent::before {background:var(--warn);}
+
+.cc-head{display:flex;align-items:center;gap:10px;padding:11px 13px 8px;}
+.health-ring{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;border:2px solid var(--border);}
+.health-ring.ok      {border-color:var(--ok);background:#00e67612;}
+.health-ring.warning {border-color:var(--warn);background:#ffb80012;}
+.health-ring.critical{border-color:var(--danger);background:#ff386012;}
+.health-ring .hn{font-family:var(--mono);font-size:12px;font-weight:700;}
+.health-ring.ok .hn      {color:var(--ok);}
+.health-ring.warning .hn {color:var(--warn);}
+.health-ring.critical .hn{color:var(--danger);}
+
+.cc-info{flex:1;min-width:0;}
+.cc-port{font-family:var(--mono);font-size:13px;color:var(--accent);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cc-mfr{font-size:10px;color:var(--dim);margin-top:1px;}
+.cc-status{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);
+  font-size:9px;padding:2px 7px;border-radius:8px;margin-top:3px;}
+.cc-status.online {background:#00e67612;color:var(--ok);    border:1px solid #00e67630;}
+.cc-status.offline{background:#ff386012;color:var(--danger);border:1px solid #ff386030;}
+.cc-status.silent {background:#ffb80012;color:var(--warn);  border:1px solid #ffb80030;}
+.cc-status .blink {animation:spin 2s linear infinite;display:inline-block;
+  font-style:normal;font-size:10px;}
+
+.cc-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:0 13px 10px;}
+.ccm{background:var(--bg3);border-radius:5px;padding:5px 6px;text-align:center;}
+.ccm .cl{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
+.ccm .cv{font-family:var(--mono);font-size:13px;font-weight:600;margin-top:1px;}
+
+.cc-extra{padding:6px 13px 11px;border-top:1px solid var(--border);}
+.cc-row{display:flex;justify-content:space-between;align-items:center;
+  padding:2px 0;font-size:10px;}
+.cc-lbl{color:var(--dim);}
+.cc-val{font-family:var(--mono);font-size:10px;}
+.mac-chip{background:var(--bg3);border:1px solid var(--border);border-radius:4px;
+  padding:1px 5px;font-family:var(--mono);font-size:9px;color:var(--dim);}
+.ip-chip {background:var(--bg3);border:1px solid #1a4a2a;border-radius:4px;
+  padding:1px 5px;font-family:var(--mono);font-size:9px;color:var(--ok);}
+
+/* ── CHART CARD ── */
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:9px;
+  padding:14px;margin-bottom:14px;}
+.chart-title{font-family:var(--mono);font-size:10px;color:var(--dim);
+  text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;}
+
+/* ── TABLE ── */
+.dt{width:100%;border-collapse:collapse;font-size:11px;}
+.dt th{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:1px;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;
+  cursor:pointer;user-select:none;}
+.dt th:hover{color:var(--accent);}
+.dt td{padding:6px 10px;border-bottom:1px solid #0f1a2e;font-family:var(--mono);font-size:11px;
+  vertical-align:middle;}
+.dt tr:hover td{background:var(--bg3);}
+.dt tr:last-child td{border-bottom:none;}
+.sort-icon{font-size:8px;margin-left:3px;color:var(--dim);}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:6px;padding:0 20px 10px;flex-wrap:wrap;}
+.tab{padding:4px 12px;border:1px solid var(--border);border-radius:5px;
+  background:var(--bg2);color:var(--dim);font-family:var(--mono);font-size:10px;
+  cursor:pointer;transition:border-color .15s,color .15s;}
+.tab:hover,.tab.active{border-color:var(--accent);color:var(--accent);background:var(--bg3);}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 20px 14px;flex-wrap:wrap;}
+.pager-meta{font-family:var(--mono);font-size:10px;color:var(--dim);}
+.pager-actions{display:flex;gap:6px;align-items:center;}
+.pager-btn{padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);
+  color:var(--text);font-family:var(--mono);font-size:10px;cursor:pointer;}
+.pager-btn:disabled{opacity:.35;cursor:not-allowed;}
+
+/* ── MISC ── */
+.badge{display:inline-block;padding:2px 7px;border-radius:8px;font-size:9px;
+  font-family:var(--mono);border:1px solid transparent;}
+.badge.ok      {background:#00e67615;color:var(--ok);    border-color:#00e67630;}
+.badge.warning {background:#ffb80015;color:var(--warn);  border-color:#ffb80030;}
+.badge.critical{background:#ff386015;color:var(--danger);border-color:#ff386030;}
+.badge.info    {background:#00d4ff15;color:var(--accent);border-color:#00d4ff30;}
+.badge.offline {background:#44444415;color:#666;         border-color:#44444430;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+.empty-state{text-align:center;padding:32px;color:var(--dim);font-family:var(--mono);font-size:11px;}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 20px 14px;}
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+@media(max-width:900px){
+  .charts-row{grid-template-columns:1fr;}
+  #cam-grid{grid-template-columns:1fr;}
 }
-.health-good { background: var(--ok); color: #000; }
-.health-warning { background: var(--warn); color: #000; }
-.health-critical { background: var(--danger); color: #fff; }
-.traffic-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
-.traffic-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; }
-.quality-low { background: #ff386022; color: var(--danger); }
-.quality-med { background: #ffb80022; color: var(--warn); }
-.quality-high { background: #00ff9d22; color: var(--ok); }
 </style>
 
-<div class="pg">
-  <div class="hdr">
-    <div>
-      <h1>📷 Camera VLAN Monitor</h1>
-      <div class="sub">VLAN 100 — Surveillance Cameras Analysis</div>
-    </div>
-    <a href="{% url 'dashboard' %}" class="back">← Dashboard</a>
+<!-- HEADER -->
+<div class="noc-hdr">
+  <a href="{% url 'dashboard' %}" class="noc-logo">NOC<em>//</em>MONITOR</a>
+  <div class="page-pill">📷 CAMERA VLAN 100</div>
+  <div class="hdr-r">
+    <a href="{% url 'dashboard' %}" class="hbtn">← Dashboard</a>
+    <button class="hbtn" onclick="toggleTheme()">☀/🌙</button>
+    <span class="noc-clock" id="clk">--:--:--</span>
   </div>
-
-  <!-- Filters: Location → Switch -->
-  <div class="search-wrap" style="margin-bottom: 20px;">
-    <select id="location-select" class="scope-sel" onchange="filterSwitchesByLocation()">
-      <option value="">— Select Location —</option>
-      {% for loc in locations %}
-      <option value="{{ loc.id }}" data-name="{{ loc.name }}">{{ loc.name }}</option>
-      {% endfor %}
-    </select>
-    
-    <select id="switch-select" class="scope-sel" onchange="loadCameraData()" disabled>
-      <option value="">— Select Switch —</option>
-    </select>
-    
-    <select id="hours-select" class="scope-sel" onchange="loadCameraData()">
-      <option value="1">Last Hour</option>
-      <option value="6" selected>Last 6 Hours</option>
-      <option value="24">Last 24 Hours</option>
-    </select>
-    
-    <button class="search-btn" onclick="loadCameraData()">Analyze</button>
-  </div>
-
-  <!-- Summary Cards -->
-  <div class="stat-row" id="summary-cards" style="display:none">
-    <div class="stat"><div class="stat-lbl">Total Cameras</div><div class="stat-val" id="total-cam">—</div></div>
-    <div class="stat"><div class="stat-lbl">Online</div><div class="stat-val" id="online-cam" style="color:var(--ok)">—</div></div>
-    <div class="stat"><div class="stat-lbl">Offline</div><div class="stat-val" id="offline-cam" style="color:var(--danger)">—</div></div>
-    <div class="stat"><div class="stat-lbl">Silent Cameras</div><div class="stat-val" id="silent-cam" style="color:var(--warn)">—</div></div>
-    <div class="stat"><div class="stat-lbl">Total Traffic</div><div class="stat-val" id="total-traffic" style="color:var(--accent)">—</div></div>
-  </div>
-
-  <!-- Charts Row -->
-  <div class="ch-row" style="margin-bottom: 20px;">
-    <div class="chc"><div class="cht">📊 Traffic Distribution (Top 10)</div><canvas id="trafficChart" height="200"></canvas></div>
-    <div class="chc"><div class="cht">📈 Health Score Distribution</div><canvas id="healthChart" height="200"></canvas></div>
-  </div>
-
-  <!-- Top 5 Highest Traffic -->
-  <div class="st">🔥 TOP 5 HIGHEST TRAFFIC</div>
-  <div id="top-cameras"></div>
-
-  <!-- Silent Cameras (Online but no traffic) -->
-  <div class="st">😴 SILENT CAMERAS (Online but no traffic)</div>
-  <div id="silent-cameras"></div>
-
-  <!-- Quality Insights -->
-  <div class="st">🎬 VIDEO QUALITY INSIGHTS</div>
-  <div id="quality-insights"></div>
-
-  <!-- All Cameras -->
-  <div class="st">🗺 ALL CAMERAS</div>
-  <div id="all-cameras"></div>
-
-  <!-- Issues & Recommendations -->
-  <div class="st">⚠ ISSUES & RECOMMENDATIONS</div>
-  <div id="issues-list"></div>
-
-  <!-- Predictive Alerts -->
-  <div class="st">🔮 PREDICTIVE ALERTS (Coming soon)</div>
-  <div id="predictive-alerts"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<div class="diag-row" id="diag-row" style="display:none">
+  <div class="diag-card"><div class="k">VLAN Ports</div><div class="v" id="d-vlan-ports">0</div></div>
+  <div class="diag-card"><div class="k">MAC Table Count</div><div class="v" id="d-mac-count">0</div></div>
+  <div class="diag-card"><div class="k">Camera MAC Matches</div><div class="v" id="d-cam-mac">0</div></div>
+  <div class="diag-card"><div class="k">ARP Matches</div><div class="v" id="d-arp">0</div></div>
+  <div class="diag-card"><div class="k">Detected Brands</div><div class="v" id="d-mfr">0</div></div>
+</div>
+
+<!-- CONTROLS -->
+<div class="ctrl">
+  <select class="sel" id="loc-sel" onchange="filterSwitches(this.value)">
+    <option value="">— All Locations —</option>
+    {% for loc in locations %}
+    <option value="{{ loc.id }}">{{ loc.name }} ({{ loc.switch_count }})</option>
+    {% endfor %}
+  </select>
+
+  <select class="sel" id="sw-sel">
+    <option value="">— Select Switch —</option>
+  </select>
+
+  <div class="ctrl-sep"></div>
+
+  <select class="sel" id="hours-sel">
+    <option value="1">Last Hour</option>
+    <option value="6" selected>Last 6 Hours</option>
+    <option value="12">Last 12 Hours</option>
+    <option value="24">Last 24 Hours</option>
+    <option value="48">Last 48 Hours</option>
+    <option value="168">Last 7 Days</option>
+  </select>
+
+  <div class="ctrl-sep"></div>
+
+  <button class="run-btn" id="run-btn" onclick="loadAnalysis()" disabled>▶ Analyze</button>
+  <button class="refresh-btn" id="refresh-btn" onclick="refreshAnalysis()" style="display:none">↻ Refresh</button>
+  <a class="export-btn" id="export-btn" style="display:none" href="#">⬇ CSV</a>
+  <a class="export-btn" id="export-id-btn" style="display:none" href="#">⬇ IDs</a>
+
+  <div class="ctrl-sep"></div>
+
+  <!-- View toggle -->
+  <div style="display:flex;gap:4px">
+    <button class="tab active" id="tab-cards" onclick="setView('cards',this)">Cards</button>
+    <button class="tab" id="tab-table" onclick="setView('table',this)">Table</button>
+    <button class="tab" id="tab-charts" onclick="setView('charts',this)">Charts</button>
+  </div>
+
+  <span class="cache-badge" id="cache-badge" style="display:none">⚡ cached</span>
+</div>
+
+<!-- SUMMARY -->
+<div class="sum-row" id="sum-row" style="display:none">
+  <div class="sc c-info"><div class="v" id="s-total">0</div><div class="l">Total Cameras</div></div>
+  <div class="sc c-ok">  <div class="v" id="s-online">0</div><div class="l">Online</div></div>
+  <div class="sc c-crit"><div class="v" id="s-offline">0</div><div class="l">Offline</div></div>
+  <div class="sc c-warn"><div class="v" id="s-silent">0</div><div class="l">Silent</div></div>
+  <div class="sc c-a2">  <div class="v" id="s-traffic">0</div><div class="l">Total Mbps</div></div>
+  <div class="sc c-info"><div class="v" id="s-health">—</div><div class="l">Avg Health</div></div>
+  <div class="sc c-warn"><div class="v" id="s-poe-f">0</div><div class="l">PoE Faults</div></div>
+</div>
+
+<!-- ISSUES -->
+<div id="issues-section" style="display:none">
+  <div class="st">⚠ ACTIVE ISSUES</div>
+  <div id="issues-panel"></div>
+</div>
+
+<!-- VIEWS -->
+<!-- CARDS VIEW -->
+<div id="view-cards">
+  <div class="tabs" id="cam-filter-tabs">
+    <button class="tab active" onclick="filterCams('all',this)">All</button>
+    <button class="tab" onclick="filterCams('online',this)">Online</button>
+    <button class="tab" onclick="filterCams('offline',this)">Offline</button>
+    <button class="tab" onclick="filterCams('silent',this)">Silent</button>
+  </div>
+  <div class="st">📷 CAMERAS</div>
+  <div id="cam-grid">
+    <div class="empty-state">
+      <div style="font-size:28px;margin-bottom:10px">📷</div>
+      اختر موقعاً وسويتشاً ثم اضغط Analyze
+    </div>
+  </div>
+  <div class="pager" id="cards-pager" style="display:none">
+    <div class="pager-meta" id="cards-meta">0 results</div>
+    <div class="pager-actions">
+      <button class="pager-btn" id="cards-prev" onclick="changePage(-1)">Prev</button>
+      <span class="pager-meta" id="cards-page-label">Page 1 / 1</span>
+      <button class="pager-btn" id="cards-next" onclick="changePage(1)">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- TABLE VIEW -->
+<div id="view-table" style="display:none">
+  <div class="st">📋 CAMERA TABLE</div>
+  <div style="padding:0 20px 14px;overflow-x:auto">
+    <table class="dt" id="cam-table">
+      <thead>
+        <tr>
+          <th onclick="sortTable('port')">Port <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('status')">Status <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('health_score')">Health <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('traffic_mbps')">Traffic <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('estimated_quality')">Quality <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('in_errors')">CRC Errors <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('poe_status')">PoE <span class="sort-icon">↕</span></th>
+          <th>IP</th>
+          <th>MAC</th>
+          <th onclick="sortTable('manufacturer')">Manufacturer <span class="sort-icon">↕</span></th>
+        </tr>
+      </thead>
+      <tbody id="cam-tbody"></tbody>
+    </table>
+  </div>
+  <div class="pager" id="table-pager" style="display:none">
+    <div class="pager-meta" id="table-meta">0 results</div>
+    <div class="pager-actions">
+      <button class="pager-btn" id="table-prev" onclick="changePage(-1)">Prev</button>
+      <span class="pager-meta" id="table-page-label">Page 1 / 1</span>
+      <button class="pager-btn" id="table-next" onclick="changePage(1)">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHARTS VIEW -->
+<div id="view-charts" style="display:none">
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Traffic per Camera (Mbps)</div>
+      <canvas id="traffic-chart" height="100"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Health Score Distribution</div>
+      <canvas id="health-chart" height="100"></canvas>
+    </div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Status Overview</div>
+      <canvas id="status-chart" height="100"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">PoE Power (Watts)</div>
+      <canvas id="poe-chart" height="100"></canvas>
+    </div>
+  </div>
+</div>
+
 <script>
-let trafficChart = null;
-let healthChart = null;
+// ── Theme & Clock ──────────────────────────────────────────
+(function(){if(localStorage.getItem('noc-theme')==='light')document.body.classList.add('light');})();
+function toggleTheme(){document.body.classList.toggle('light');
+  localStorage.setItem('noc-theme',document.body.classList.contains('light')?'light':'dark');}
+setInterval(()=>document.getElementById('clk').textContent=new Date().toLocaleTimeString('en-GB'),1000);
 
-// Filter switches by selected location
-function filterSwitchesByLocation() {
-  const locId = document.getElementById('location-select').value;
-  const switchSelect = document.getElementById('switch-select');
-  const options = switchSelect.querySelectorAll('option[data-loc-id]');
-  
-  switchSelect.innerHTML = '<option value="">— Select Switch —</option>';
-  
-  if (!locId) {
-    switchSelect.disabled = true;
-    return;
-  }
-  
-  let hasSwitches = false;
-  options.forEach(opt => {
-    if (opt.getAttribute('data-loc-id') === locId) {
-      switchSelect.appendChild(opt.cloneNode(true));
-      hasSwitches = true;
-    }
-  });
-  
-  switchSelect.disabled = !hasSwitches;
-  if (hasSwitches) loadCameraData();
-}
+// ── State ──────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+let ALL_CAMS = [], FILTERED_CAMS = [], SORT_KEY = '', SORT_DIR = 1;
+let CURRENT_SW = null, CURRENT_HOURS = 6, CHARTS = {};
+const PAGE_SIZE = 48;
+let CURRENT_PAGE = 1;
+let CHARTS_LIB_LOADING = null;
+let LAST_SUMMARY = {};
 
-// Load switches data from Django
-const switchesData = {{ switches_data|safe }};
+// Switches data from Django
+const SWITCHES_DATA = {{ switches_json|safe }};
 
+// Populate switches with location data
 function populateSwitches() {
-  const switchSelect = document.getElementById('switch-select');
-  switchesData.forEach(sw => {
+  const sel = $('sw-sel');
+  SWITCHES_DATA.forEach(sw => {
     const opt = document.createElement('option');
     opt.value = sw.id;
-    opt.textContent = sw.hostname;
-    opt.setAttribute('data-loc-id', sw.location_id);
-    switchSelect.appendChild(opt);
+    opt.textContent = `${sw.hostname} (${sw.ip_address})`;
+    opt.setAttribute('data-loc', sw.location_id || '');
+    opt.setAttribute('data-host', sw.hostname);
+    sel.appendChild(opt);
   });
 }
 populateSwitches();
 
-const API = (endpoint) => fetch(`/api/${endpoint}`).then(r => r.json());
+function resetResults(message = 'اختر موقعاً وسويتشاً ثم اضغط Analyze') {
+  $('sum-row').style.display = 'none';
+  $('diag-row').style.display = 'none';
+  $('issues-section').style.display = 'none';
+  $('cards-pager').style.display = 'none';
+  $('table-pager').style.display = 'none';
+  $('cam-tbody').innerHTML = '';
+  $('cam-grid').innerHTML = `<div class="empty-state"><div style="font-size:28px;margin-bottom:10px">📷</div>${message}</div>`;
+  LAST_SUMMARY = {};
+}
 
-async function loadCameraData() {
-  const swId = document.getElementById('switch-select').value;
-  const hours = document.getElementById('hours-select').value;
+// ── Switch filter by location ──────────────────────────────
+function filterSwitches(locId) {
+  const sel = $('sw-sel');
+  for(let i = 1; i < sel.options.length; i++) {
+    const opt = sel.options[i];
+    opt.style.display = (!locId || opt.dataset.loc == locId) ? '' : 'none';
+  }
+  sel.value = '';
+  $('run-btn').disabled = true;
+  $('run-btn').style.display = 'inline-block';
+  $('refresh-btn').style.display = 'none';
+  $('export-btn').style.display = 'none';
+  resetResults();
+}
+
+$('sw-sel').addEventListener('change', function() {
+  $('run-btn').disabled = !this.value;
+  $('run-btn').style.display = 'inline-block';
+  CURRENT_SW = this.value;
+});
+
+// ── View toggle ────────────────────────────────────────────
+let CURRENT_VIEW = 'cards';
+function setView(v, btn) {
+  CURRENT_VIEW = v;
+  document.querySelectorAll('#view-cards, #view-table, #view-charts').forEach(el => el.style.display = 'none');
+  document.getElementById(`view-${v}`).style.display = '';
   
-  if (!swId) return;
+  document.querySelectorAll('.tabs .tab[id^=tab-]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
   
-  document.getElementById('summary-cards').style.display = 'none';
-  document.getElementById('top-cameras').innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+  renderActiveView();
+}
+
+// ── Camera filter ──────────────────────────────────────────
+let CAM_FILTER = 'all';
+function filterCams(f, btn) {
+  CAM_FILTER = f;
+  CURRENT_PAGE = 1;
+  document.querySelectorAll('#cam-filter-tabs .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  FILTERED_CAMS = f === 'all' ? ALL_CAMS : ALL_CAMS.filter(c=>c.status===f);
+  renderActiveView();
+}
+
+function resetCamFilter() {
+  CAM_FILTER = 'all';
+  document.querySelectorAll('#cam-filter-tabs .tab').forEach((b, index) => {
+    b.classList.toggle('active', index === 0);
+  });
+}
+
+// ── Load Analysis ──────────────────────────────────────────
+async function loadAnalysis() {
+  const swId = $('sw-sel').value;
+  const hours = $('hours-sel') ? $('hours-sel').value : 6;
+  CURRENT_HOURS = parseInt(hours);
+  
+  if(!swId) return;
+  
+  // Show loading
+  resetResults('<div class="spinner"></div><div style="margin-top:10px">جاري التحليل...</div>');
+  $('cache-badge').style.display = 'none';
   
   try {
-    const data = await API(`camera-vlan/${swId}/?hours=${hours}`);
-    renderCameraData(data);
-  } catch(e) {
-    document.getElementById('top-cameras').innerHTML = `<div class="empty-state" style="color:var(--danger)">Error: ${e.message}</div>`;
+    const url = `/camera/api/analysis/${swId}/?hours=${CURRENT_HOURS}&compact=1`;
+    console.log("Fetching:", url);
+    const response = await fetch(url);
+    if(!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    
+    if(data.error) { 
+      $('cam-grid').innerHTML = `<div class="empty-state" style="color:var(--danger)">⚠ ${data.error}</div>`;
+      return;
+    }
+    requestAnimationFrame(() => renderAll(data));
+  } catch(e) { 
+    console.error("Analysis error:", e);
+    $('cam-grid').innerHTML = `<div class="empty-state" style="color:var(--danger)">⚠ خطأ في الاتصال: ${e.message}<br><br>تأكد من أن الخادم يعمل والـ URLs صحيحة</div>`;
   }
 }
 
-function renderCameraData(data) {
-  // Summary
-  document.getElementById('summary-cards').style.display = 'grid';
-  document.getElementById('total-cam').textContent = data.summary.total_cameras;
-  document.getElementById('online-cam').textContent = data.summary.online_cameras;
-  document.getElementById('offline-cam').textContent = data.summary.offline_cameras;
-  document.getElementById('silent-cam').textContent = data.summary.silent_cameras || 0;
-  document.getElementById('total-traffic').textContent = data.summary.total_traffic_mbps + ' Mbps';
+async function refreshAnalysis() {
+  const swId = $('sw-sel').value;
+  const hours = $('hours-sel') ? $('hours-sel').value : 6;
+  if(!swId) return;
   
-  // Charts
-  const top10 = data.top_traffic.slice(0, 10);
-  const labels = top10.map(c => c.port);
-  const trafficData = top10.map(c => c.traffic_mbps);
-  const healthData = top10.map(c => c.health_score);
+  $('cam-grid').innerHTML = '<div class="empty-state"><div class="spinner"></div><div style="margin-top:10px">جاري التحديث...</div></div>';
+  $('cache-badge').style.display = 'none';
   
-  if (trafficChart) trafficChart.destroy();
-  if (healthChart) healthChart.destroy();
-  
-  const ctx1 = document.getElementById('trafficChart').getContext('2d');
-  const ctx2 = document.getElementById('healthChart').getContext('2d');
-  
-  trafficChart = new Chart(ctx1, {
-    type: 'bar',
-    data: { labels, datasets: [{ label: 'Traffic (Mbps)', data: trafficData, backgroundColor: '#00d4ff', borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#4a6a8a' } } } }
-  });
-  
-  healthChart = new Chart(ctx2, {
-    type: 'bar',
-    data: { labels, datasets: [{ label: 'Health Score (%)', data: healthData, backgroundColor: '#00ff9d', borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#4a6a8a' } } } }
-  });
-  
-  // Top Cameras
-  const topHtml = data.top_traffic.slice(0, 5).map(cam => `
-    <div class="camera-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
-        <div><span class="camera-health health-${cam.health_score >= 70 ? 'good' : cam.health_score >= 40 ? 'warning' : 'critical'}">${cam.health_score}</span>
-          <strong style="margin-left:10px;color:var(--accent)">${cam.port}</strong>
-          ${cam.ip_addresses.length ? `<span style="margin-left:10px;font-family:monospace;color:var(--accent2)">${cam.ip_addresses[0]}</span>` : ''}
-        </div>
-        <div><span style="color:${cam.traffic_mbps > 30 ? 'var(--warn)' : 'var(--ok)'}">${cam.traffic_mbps} Mbps</span></div>
-      </div>
-      <div class="traffic-bar" style="margin:8px 0 4px"><div class="traffic-fill" style="width:${Math.min(100, cam.traffic_mbps / 50 * 100)}%"></div></div>
-      <div style="display:flex;gap:15px;font-size:10px;color:var(--dim);flex-wrap:wrap">
-        <span>📭 ${cam.in_errors} errors</span>
-        <span>🔌 ${cam.poe_status === 'on' ? 'PoE OK' : cam.poe_status === 'fault' ? 'PoE Fault' : 'No PoE'}</span>
-        <span>🏭 ${cam.manufacturer}</span>
-        <span>📹 ${cam.estimated_quality}</span>
-      </div>
-    </div>
-  `).join('');
-  
-  document.getElementById('top-cameras').innerHTML = topHtml || '<div class="empty-state">No cameras found</div>';
-  
-  // Silent Cameras (online but no traffic)
-  const silentCams = data.cameras.filter(c => c.status === 'online' && c.traffic_mbps === 0);
-  const silentHtml = silentCams.map(cam => `
-    <div class="camera-card" style="border-left:3px solid var(--warn)">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
-        <div><strong style="color:var(--accent)">${cam.port}</strong>
-          ${cam.ip_addresses.length ? `<span style="margin-left:10px;font-family:monospace">${cam.ip_addresses[0]}</span>` : ''}
-        </div>
-        <div><span class="badge warn">⚠ No Traffic</span></div>
-      </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:6px">
-        Camera is online but not sending any data. May be frozen or misconfigured.
-      </div>
-    </div>
-  `).join('');
-  
-  document.getElementById('silent-cameras').innerHTML = silentHtml || '<div class="empty-state">✅ All online cameras are transmitting data</div>';
-  
-  // Quality Insights
-  const qualityStats = { low: 0, med: 0, high: 0 };
-  data.cameras.forEach(c => {
-    if (c.estimated_quality === 'Low') qualityStats.low++;
-    else if (c.estimated_quality === 'Medium') qualityStats.med++;
-    else if (c.estimated_quality === 'High') qualityStats.high++;
-  });
-  
-  const qualityHtml = `
-    <div class="cards-grid" style="margin-bottom:0">
-      <div class="info-card"><div class="ic-label">Low Quality (<2 Mbps)</div><div class="ic-value" style="color:var(--danger)">${qualityStats.low}</div><div class="ic-sub">cameras</div></div>
-      <div class="info-card"><div class="ic-label">Medium Quality (2-5 Mbps)</div><div class="ic-value" style="color:var(--warn)">${qualityStats.med}</div><div class="ic-sub">cameras</div></div>
-      <div class="info-card"><div class="ic-label">High Quality (>5 Mbps)</div><div class="ic-value" style="color:var(--ok)">${qualityStats.high}</div><div class="ic-sub">cameras</div></div>
-    </div>
-    <div style="font-size:10px;color:var(--dim);margin-top:6px">💡 Tip: High traffic >8 Mbps may indicate 4K streaming or network loop</div>
-  `;
-  document.getElementById('quality-insights').innerHTML = qualityHtml;
-  
-  // All Cameras
-  const allHtml = data.cameras.map(cam => `
-    <div class="camera-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <div><span class="camera-health health-${cam.health_score >= 70 ? 'good' : cam.health_score >= 40 ? 'warning' : 'critical'}">${cam.health_score}</span>
-          <strong style="margin-left:10px;color:var(--accent)">${cam.port}</strong>
-        </div>
-        <div><span style="color:${cam.status === 'online' ? 'var(--ok)' : 'var(--danger)'}">${cam.status.toUpperCase()}</span></div>
-        <div>${cam.traffic_mbps} Mbps</div>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:15px;margin-top:8px;font-size:10px;color:var(--dim)">
-        <span>📥 ${formatBytes(cam.in_octets)}</span>
-        <span>⚠ ${cam.in_errors + cam.out_errors} errors</span>
-        <span>🔌 ${cam.poe_power_w}W (${cam.poe_status})</span>
-        ${cam.ip_addresses.length ? `<span>🌐 ${cam.ip_addresses.join(', ')}</span>` : ''}
-        <span class="quality-${cam.estimated_quality === 'Low' ? 'low' : cam.estimated_quality === 'Medium' ? 'med' : 'high'}">🎬 ${cam.estimated_quality}</span>
-      </div>
-    </div>
-  `).join('');
-  
-  document.getElementById('all-cameras').innerHTML = allHtml || '<div class="empty-state">No cameras found in VLAN 100</div>';
-  
-  // Issues
-  const issuesHtml = data.issues.map(issue => `
-    <div class="issue-item ${issue.severity}">
-      <div class="issue-sev ${issue.severity}"></div>
-      <div class="issue-body">
-        <div class="issue-msg"><strong>${issue.port}</strong> — ${issue.message}</div>
-        <div class="issue-fix">💡 ${issue.recommendation}</div>
-      </div>
-    </div>
-  `).join('');
-  
-  document.getElementById('issues-list').innerHTML = issuesHtml || '<div class="empty-state">✅ No issues detected</div>';
-  
-  // Predictive Alerts
-  const predictiveCams = data.cameras.filter(cam => cam.predicted_failure_days);
-  const predHtml = predictiveCams.map(cam => `
-    <div class="issue-item critical">
-      <div class="issue-sev critical"></div>
-      <div class="issue-body">
-        <div class="issue-msg"><strong>${cam.port}</strong> — ⚠ Predicted failure in ~${cam.predicted_failure_days} days</div>
-        <div class="issue-fix">🔧 ${cam.predicted_failure_reason || 'CRC errors increasing steadily'}</div>
-      </div>
-    </div>
-  `).join('');
-  
-  document.getElementById('predictive-alerts').innerHTML = predHtml || '<div class="empty-state">✅ No predicted failures in next 7 days</div>';
+  try {
+    const url = `/camera/api/refresh/${swId}/?hours=${hours}&compact=1`;
+    const response = await fetch(url);
+    const data = await response.json();
+    requestAnimationFrame(() => renderAll(data));
+  } catch(e) { 
+    console.error("Refresh error:", e);
+    $('cam-grid').innerHTML = `<div class="empty-state" style="color:var(--danger)">⚠ ${e.message}</div>`;
+  }
 }
 
-function formatBytes(bytes) {
-  if (!bytes) return '—';
-  if (bytes > 1e9) return (bytes / 1e9).toFixed(1) + 'G';
-  if (bytes > 1e6) return (bytes / 1e6).toFixed(1) + 'M';
-  if (bytes > 1e3) return (bytes / 1e3).toFixed(1) + 'K';
-  return bytes + 'B';
+// ── Render All ─────────────────────────────────────────────
+function renderAll(data) {
+  LAST_SUMMARY = data.summary || {};
+  resetCamFilter();
+  ALL_CAMS = data.cameras || [];
+  FILTERED_CAMS = ALL_CAMS;
+  CURRENT_PAGE = 1;
+  const swId = $('sw-sel').value;
+
+  // Cache badge
+  const cb = $('cache-badge');
+  cb.style.display = data.from_cache ? 'inline-block' : 'none';
+
+  // Export + refresh buttons
+  const exportBtn = $('export-btn');
+  exportBtn.href = `/camera/api/export/${swId}/`;
+  exportBtn.style.display = 'inline-block';
+  const exportIdBtn = $('export-id-btn');
+  exportIdBtn.href = `/camera/api/export-identities/${swId}/?hours=${CURRENT_HOURS}`;
+  exportIdBtn.style.display = 'inline-block';
+  $('refresh-btn').style.display = 'inline-block';
+  $('run-btn').style.display = 'none';
+
+  renderSummary(data.summary || {});
+  renderDiagnostics(data.diagnostics || {});
+  renderIssues(data.issues || []);
+  renderActiveView();
 }
+
+// ── Summary ────────────────────────────────────────────────
+function renderSummary(s) {
+  $('sum-row').style.display = 'grid';
+  $('s-total').textContent   = s.total_cameras || 0;
+  $('s-online').textContent  = s.online_cameras || 0;
+  $('s-offline').textContent = s.offline_cameras || 0;
+  $('s-silent').textContent  = s.silent_cameras || 0;
+  $('s-traffic').textContent = (s.total_traffic_mbps || 0) + 'M';
+  $('s-health').textContent  = s.avg_health_score != null ? s.avg_health_score : '—';
+  $('s-poe-f').textContent   = s.poe_faults || 0;
+}
+
+function renderDiagnostics(d) {
+  if(!$('diag-row')) return;
+  $('diag-row').style.display = 'grid';
+  $('d-vlan-ports').textContent = d.vlan_port_count || 0;
+  $('d-mac-count').textContent = d.mac_table_count || 0;
+  $('d-cam-mac').textContent = d.camera_mac_matches || 0;
+  $('d-arp').textContent = d.arp_matches || 0;
+  $('d-mfr').textContent = d.manufacturer_detected_count || 0;
+}
+
+// ── Issues ─────────────────────────────────────────────────
+function renderIssues(issues) {
+  if(!issues || !issues.length) { 
+    $('issues-section').style.display = 'none'; 
+    return; 
+  }
+  $('issues-section').style.display = 'block';
+  $('issues-panel').innerHTML = issues.map(i => `
+    <div class="issue-row ${i.severity}">
+      <div class="issue-dot ${i.severity}"></div>
+      <div style="flex:1">
+        <div class="issue-msg">${i.message}</div>
+        <div class="issue-rec">→ ${i.recommendation}</div>
+      </div>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--accent)">${i.port}</span>
+    </div>
+  `).join('');
+}
+
+// ── Cards ──────────────────────────────────────────────────
+function getPagedItems(cams) {
+  const totalPages = Math.max(1, Math.ceil(cams.length / PAGE_SIZE));
+  CURRENT_PAGE = Math.min(CURRENT_PAGE, totalPages);
+  const start = (CURRENT_PAGE - 1) * PAGE_SIZE;
+  return {
+    items: cams.slice(start, start + PAGE_SIZE),
+    start,
+    totalPages,
+  };
+}
+
+function renderActiveView() {
+  if(CURRENT_VIEW === 'charts') {
+    $('cards-pager').style.display = 'none';
+    $('table-pager').style.display = 'none';
+    if(ALL_CAMS.length) renderCharts(ALL_CAMS);
+    return;
+  }
+  if(CURRENT_VIEW === 'table') {
+    renderTable(FILTERED_CAMS);
+    return;
+  }
+  renderCards(FILTERED_CAMS);
+}
+
+function renderPager(kind, total, totalPages, start, shown) {
+  const wrap = $(`${kind}-pager`);
+  if(!total) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = total > PAGE_SIZE ? 'flex' : 'none';
+  $(`${kind}-meta`).textContent = `${start + 1}-${start + shown} of ${total} cameras`;
+  $(`${kind}-page-label`).textContent = `Page ${CURRENT_PAGE} / ${totalPages}`;
+  $(`${kind}-prev`).disabled = CURRENT_PAGE <= 1;
+  $(`${kind}-next`).disabled = CURRENT_PAGE >= totalPages;
+}
+
+function changePage(delta) {
+  CURRENT_PAGE = Math.max(1, CURRENT_PAGE + delta);
+  renderActiveView();
+}
+
+function renderCards(cams) {
+  const grid = $('cam-grid');
+  $('table-pager').style.display = 'none';
+  if(!cams.length) {
+    $('cards-pager').style.display = 'none';
+    const msg = ALL_CAMS.length
+      ? 'لا توجد كاميرات بهذه الفلترة'
+      : (LAST_SUMMARY.message || 'No cameras available for this period.');
+    grid.innerHTML = `<div class="empty-state">${msg}</div>`;
+    return;
+  }
+  const { items, start, totalPages } = getPagedItems(cams);
+  const hcls = h => h < 40 ? 'critical' : h < 70 ? 'warning' : 'ok';
+  
+  grid.innerHTML = items.map(c => `
+    <div class="cam-card ${c.status}">
+      <div class="cc-head">
+        <div class="health-ring ${hcls(c.health_score)}">
+          <span class="hn">${c.health_score}</span>
+        </div>
+        <div class="cc-info">
+          <div class="cc-port">${c.port}</div>
+          <div class="cc-mfr">${c.manufacturer || 'Unknown'}</div>
+          <div class="cc-status ${c.status}">
+            ${c.status === 'online' ? '●' : c.status === 'offline' ? '○' : '◎'}
+            ${c.status.toUpperCase()}
+            ${c.status === 'online' && c.estimated_quality !== '—' ? ` · ${c.estimated_quality}` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="cc-metrics">
+        <div class="ccm">
+          <div class="cl">Traffic</div>
+          <div class="cv" style="color:var(--accent)">${c.traffic_mbps}M</div>
+        </div>
+        <div class="ccm">
+          <div class="cl">CRC Err</div>
+          <div class="cv" style="color:${c.in_errors > 100 ? 'var(--danger)' : c.in_errors > 10 ? 'var(--warn)' : 'var(--ok)'}">${c.in_errors}</div>
+        </div>
+        <div class="ccm">
+          <div class="cl">PoE</div>
+          <div class="cv" style="color:${c.poe_status === 'fault' ? 'var(--danger)' : c.poe_status === 'on' ? 'var(--ok)' : 'var(--dim)'}">${c.poe_power_w ? c.poe_power_w.toFixed(1) : 0}W</div>
+        </div>
+      </div>
+
+      <div class="cc-extra">
+        ${c.ip_addresses && c.ip_addresses.length ? `
+        <div class="cc-row">
+          <span class="cc-lbl">IP</span>
+          <span>${c.ip_addresses.map(ip => `<span class="ip-chip">${ip}</span>`).join(' ')}</span>
+        </div>` : ''}
+        ${c.mac_addresses && c.mac_addresses.length ? `
+        <div class="cc-row">
+          <span class="cc-lbl">MAC</span>
+          <span>${c.mac_addresses.map(m => `<span class="mac-chip">${m}</span>`).join(' ')}</span>
+        </div>` : ''}
+        <div class="cc-row">
+          <span class="cc-lbl">Speed</span>
+          <span class="cc-val">${c.speed || '—'}</span>
+        </div>
+        ${c.poe_status && c.poe_status !== '—' ? `
+        <div class="cc-row">
+          <span class="cc-lbl">PoE Status</span>
+          <span class="cc-val" style="color:${c.poe_status === 'fault' ? 'var(--danger)' : c.poe_status === 'on' ? 'var(--ok)' : 'var(--dim)'}">${c.poe_status}</span>
+        </div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  renderPager('cards', cams.length, totalPages, start, items.length);
+}
+
+// ── Table ──────────────────────────────────────────────────
+let _sortDir = {};
+function sortTable(key) {
+  _sortDir[key] = (_sortDir[key] || 1) * -1;
+  CURRENT_PAGE = 1;
+  const d = _sortDir[key];
+  FILTERED_CAMS.sort((a,b)=> {
+    let av = a[key] ?? '', bv = b[key] ?? '';
+    if(typeof av === 'number') return (av - bv) * d;
+    return (av > bv ? 1 : av < bv ? -1 : 0) * d;
+    });
+  renderTable(FILTERED_CAMS);
+}
+
+function renderTable(cams) {
+  const tbody = $('cam-tbody');
+  $('cards-pager').style.display = 'none';
+  if(!cams.length){
+    $('table-pager').style.display = 'none';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--dim);padding:20px">No data</td></tr>';
+    return;
+  }
+  const { items, start, totalPages } = getPagedItems(cams);
+  const stcls = {'online':'ok','offline':'critical','silent':'warning'};
+  tbody.innerHTML = items.map(c => `
+    <tr>
+      <td style="color:var(--accent)">${c.port}</td>
+      <td><span class="badge ${stcls[c.status] || 'info'}">${c.status}</span></td>
+      <td><span style="color:${c.health_score < 40 ? 'var(--danger)' : c.health_score < 70 ? 'var(--warn)' : 'var(--ok)'}">${c.health_score}</span></td>
+      <td>${c.traffic_mbps}M</td>
+      <td style="color:var(--dim)">${c.estimated_quality || '—'}</td>
+      <td style="color:${c.in_errors > 100 ? 'var(--danger)' : c.in_errors > 10 ? 'var(--warn)' : 'var(--dim)'}">${c.in_errors}</td>
+      <td style="color:${c.poe_status === 'fault' ? 'var(--danger)' : c.poe_status === 'on' ? 'var(--ok)' : 'var(--dim)'}">${c.poe_status || '—'}</td>
+      <td>${c.ip_addresses ? c.ip_addresses.map(ip => `<span class="ip-chip">${ip}</span>`).join(' ') || '—' : '—'}</td>
+      <td style="font-size:9px;color:var(--dim)">${c.mac_addresses ? c.mac_addresses[0] || '—' : '—'}</td>
+      <td style="color:var(--dim)">${c.manufacturer || 'Unknown'}</td>
+    </tr>
+  `).join('');
+  renderPager('table', cams.length, totalPages, start, items.length);
+}
+
+// ── Charts ─────────────────────────────────────────────────
+function destroyChart(id){if(CHARTS[id]){CHARTS[id].destroy();delete CHARTS[id];}}
+
+async function ensureChartsLib() {
+  if(window.Chart) return;
+  if(CHARTS_LIB_LOADING) {
+    await CHARTS_LIB_LOADING;
+    return;
+  }
+  CHARTS_LIB_LOADING = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  await CHARTS_LIB_LOADING;
+}
+
+async function renderCharts(cams) {
+  if(!cams.length) return;
+  await ensureChartsLib();
+
+  // Traffic per camera (top 15 online only)
+  destroyChart('traffic-chart');
+  const top15 = cams.filter(c=>c.status==='online').slice(0,15);
+  if(top15.length) {
+    CHARTS['traffic-chart'] = new Chart($('traffic-chart').getContext('2d'), {
+      type:'bar',
+      data:{
+        labels: top15.map(c=>c.port),
+        datasets:[{
+          label:'Mbps',
+          data: top15.map(c=>c.traffic_mbps),
+          backgroundColor: top15.map(c=>
+            c.traffic_mbps>8 ? '#ff386088' : c.traffic_mbps>4 ? '#ffb80088' : '#00e67688'),
+          borderColor: top15.map(c=>
+            c.traffic_mbps>8 ? '#ff3860' : c.traffic_mbps>4 ? '#ffb800' : '#00e676'),
+          borderWidth:1,
+        }]
+      },
+      options:{responsive:true,animation:false,
+        plugins:{legend:{display:false}},
+        scales:{x:{ticks:{color:'#4a6a8a',font:{size:8}},grid:{color:'#0f1a2e'}},
+                y:{ticks:{color:'#4a6a8a',font:{size:8}},grid:{color:'#0f1a2e'}}}}
+    });
+  }
+
+  // Health distribution
+  destroyChart('health-chart');
+  const hBuckets = [0,0,0,0];
+  cams.forEach(c=>{
+    if(c.health_score<=25) hBuckets[0]++;
+    else if(c.health_score<=50) hBuckets[1]++;
+    else if(c.health_score<=75) hBuckets[2]++;
+    else hBuckets[3]++;
+  });
+  CHARTS['health-chart'] = new Chart($('health-chart').getContext('2d'), {
+    type:'doughnut',
+    data:{
+      labels:['0-25 (Critical)','26-50 (Poor)','51-75 (Fair)','76-100 (Good)'],
+      datasets:[{data:hBuckets,
+        backgroundColor:['#ff386088','#ff880088','#ffb80088','#00e67688'],
+        borderColor:['#ff3860','#ff8800','#ffb800','#00e676'],
+        borderWidth:1}]
+    },
+    options:{responsive:true,animation:false,
+      plugins:{legend:{labels:{color:'#4a6a8a',font:{size:9}}}}}
+  });
+
+  // Status overview
+  destroyChart('status-chart');
+  const online=cams.filter(c=>c.status==='online').length;
+  const offline=cams.filter(c=>c.status==='offline').length;
+  const silent=cams.filter(c=>c.status==='silent').length;
+  CHARTS['status-chart'] = new Chart($('status-chart').getContext('2d'), {
+    type:'doughnut',
+    data:{
+      labels:['Online','Offline','Silent'],
+      datasets:[{data:[online,offline,silent],
+        backgroundColor:['#00e67688','#ff386088','#ffb80088'],
+        borderColor:['#00e676','#ff3860','#ffb800'],borderWidth:1}]
+    },
+    options:{responsive:true,animation:false,
+      plugins:{legend:{labels:{color:'#4a6a8a',font:{size:9}}}}}
+  });
+
+  // PoE power (top 15)
+  destroyChart('poe-chart');
+  const poeCams = cams.filter(c=>c.poe_power_w>0).slice(0,15);
+  if(poeCams.length) {
+    CHARTS['poe-chart'] = new Chart($('poe-chart').getContext('2d'), {
+      type:'bar',
+      data:{
+        labels:poeCams.map(c=>c.port),
+        datasets:[{
+          label:'Watts',
+          data:poeCams.map(c=>c.poe_power_w.toFixed(1)),
+          backgroundColor:poeCams.map(c=>
+            c.poe_status==='fault'?'#ff386088':
+            c.poe_power_w>25?'#ffb80088':'#00d4ff88'),
+          borderColor:poeCams.map(c=>
+            c.poe_status==='fault'?'#ff3860':
+            c.poe_power_w>25?'#ffb800':'#00d4ff'),
+          borderWidth:1,
+        }]
+      },
+      options:{responsive:true,animation:false,
+        plugins:{legend:{display:false}},
+        scales:{x:{ticks:{color:'#4a6a8a',font:{size:8}},grid:{color:'#0f1a2e'}},
+                y:{ticks:{color:'#4a6a8a',font:{size:8}},grid:{color:'#0f1a2e'}}}}
+    });
+  }
+}
+
+// Diagnostic function - call from console if needed
+window.testAPI = async function() {
+  const swId = $('sw-sel').value;
+  if(!swId) { console.log("No switch selected"); return; }
+  const url = `/camera/api/analysis/${swId}/?hours=6&compact=1`;
+  console.log("Testing API:", url);
+  try {
+    const r = await fetch(url);
+    console.log("Response status:", r.status);
+    const d = await r.json();
+    console.log("Data:", d);
+    if(d.error) console.error("API Error:", d.error);
+  } catch(e) { console.error("Fetch error:", e); }
+};
 </script>
 {% endblock %}

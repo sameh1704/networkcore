@@ -1,0 +1,638 @@
+{% extends "layout/base.html" %}
+{% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07111e;--panel:#0d1829;--panel2:#132238;--line:#213956;--text:#d9e6f6;--muted:#7894b3;
+  --cyan:#30d6ff;--green:#00e59b;--amber:#ffbf47;--red:#ff5d73;
+  --mono:'Share Tech Mono',monospace;--sans:'Exo 2',sans-serif;
+}
+body.light{--bg:#eef4fb;--panel:#fff;--panel2:#f6f9fd;--line:#cedced;--text:#172333;--muted:#58708a;--cyan:#006fd6;--green:#0f9b66;--amber:#d48f00;--red:#d2334f;}
+body,#main-content,.content{background:var(--bg)!important;color:var(--text);font-family:var(--sans);}
+*{box-sizing:border-box}
+@keyframes spin{to{transform:rotate(360deg)}}
+.wrap{padding:18px 20px 28px}
+.topbar,.toolbar,.tabs,.summary,.grid,.section{display:flex;gap:12px;flex-wrap:wrap}
+.topbar{align-items:center;justify-content:space-between;margin-bottom:14px}
+.brand{font:700 16px var(--mono);letter-spacing:2px;color:var(--cyan);text-decoration:none}
+.title{font:700 18px var(--mono);color:var(--text)}
+.clock{font:12px var(--mono);color:var(--muted)}
+.toolbar{padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;align-items:center}
+.sel,.inp,.btn{border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:10px 12px;font:12px var(--mono)}
+.sel,.inp{min-width:180px}
+.btn{cursor:pointer;transition:.18s}
+.btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn.primary{background:linear-gradient(135deg,var(--cyan),#67f2ff);color:#021522;border:none;font-weight:700}
+.btn.success{color:var(--green)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.tabs{margin:14px 0}
+.tab{padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font:12px var(--mono);cursor:pointer}
+.tab.active{color:var(--cyan);border-color:var(--cyan);background:rgba(48,214,255,.08)}
+.summary{margin-bottom:14px}
+.metric{flex:1 1 220px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:16px}
+.metric .label{font:10px var(--mono);text-transform:uppercase;color:var(--muted);letter-spacing:1px}
+.metric .value{font:700 28px var(--mono);margin-top:8px}
+.metric .sub{font-size:12px;color:var(--muted);margin-top:4px}
+.section{display:block;padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:18px}
+.section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.section-title h3{font:700 15px var(--mono);margin:0}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;border:1px solid var(--line);font:10px var(--mono);color:var(--muted)}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:12px}
+th{font:10px var(--mono);text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+tbody tr:hover{background:rgba(48,214,255,.04)}
+.status{display:inline-flex;align-items:center;gap:6px;font:11px var(--mono)}
+.dot{width:9px;height:9px;border-radius:50%}
+.up{background:var(--green);box-shadow:0 0 8px rgba(0,229,155,.45)}
+.warn{background:var(--amber)}
+.down{background:var(--red)}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;font:10px var(--mono);border:1px solid transparent}
+.badge.good{color:var(--green);border-color:rgba(0,229,155,.25);background:rgba(0,229,155,.08)}
+.badge.warning{color:var(--amber);border-color:rgba(255,191,71,.25);background:rgba(255,191,71,.08)}
+.badge.critical{color:var(--red);border-color:rgba(255,93,115,.25);background:rgba(255,93,115,.08)}
+.badge.info{color:var(--cyan);border-color:rgba(48,214,255,.25);background:rgba(48,214,255,.08)}
+.spark{width:150px;height:40px;display:block}
+.progress{height:7px;background:var(--panel2);border-radius:999px;overflow:hidden;min-width:80px}
+.progress.large{height:10px;margin-top:10px}
+.progress > span{display:block;height:100%}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.mini-btn{padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--cyan);font:10px var(--mono);cursor:pointer}
+.issues{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.issue{padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--panel2)}
+.issue.critical{border-color:rgba(255,93,115,.35)}
+.issue.warning{border-color:rgba(255,191,71,.35)}
+.issue .head{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.empty{padding:34px 10px;text-align:center;color:var(--muted);font:12px var(--mono)}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite}
+.live-box{margin-top:10px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px}
+.live-samples{max-height:220px;overflow:auto;margin-top:10px}
+.live-samples table td,.live-samples table th{padding:8px 6px;font-size:11px}
+.small{font-size:11px;color:var(--muted)}
+@media(max-width:960px){.sel,.inp{min-width:100%;width:100%}.toolbar{align-items:stretch}.spark{width:120px}}
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <a href="{% url 'dashboard' %}" class="brand">NOC//MONITOR</a>
+      <div class="title">Port Speed Analyzer</div>
+    </div>
+    <div class="clock" id="clk">--:--:--</div>
+  </div>
+
+  <div class="toolbar">
+    <select class="sel" id="location-sel" onchange="filterSwitchesByLocation()">
+      <option value="">All Locations</option>
+      {% for loc in locations %}
+      <option value="{{ loc.id }}">{{ loc.name }} ({{ loc.switch_count }})</option>
+      {% endfor %}
+    </select>
+
+    <select class="sel" id="switch-sel" onchange="onSwitchSelect()">
+      <option value="">Select Switch</option>
+      {% for sw in switches %}
+      <option value="{{ sw.id }}" data-location="{{ sw.location_id }}" data-ip="{{ sw.ip_address }}" data-host="{{ sw.hostname }}">
+        {{ sw.hostname }} ({{ sw.ip_address }})
+      </option>
+      {% endfor %}
+    </select>
+
+    <select class="sel" id="port-sel">
+      <option value="">Select Port</option>
+    </select>
+
+    <select class="sel" id="hours-sel">
+      <option value="1">Last 1 Hour</option>
+      <option value="6" selected>Last 6 Hours</option>
+      <option value="12">Last 12 Hours</option>
+      <option value="24">Last 24 Hours</option>
+      <option value="48">Last 48 Hours</option>
+      <option value="168">Last 7 Days</option>
+    </select>
+
+    <input class="inp" id="scan-network" value="192.168.70.0/24" placeholder="Optional ARP refresh subnet">
+    <input class="inp" id="iperf-target" value="" placeholder="Optional iperf3 target IP">
+
+    <button class="btn primary" id="analyze-btn" onclick="analyzePorts()" disabled>Analyze</button>
+    <button class="btn success" id="scan-btn" onclick="discoverDevices(false)" disabled>Discover Devices</button>
+    <button class="btn" id="test-btn" onclick="runSelectedPortTest()" disabled>Live Port Test</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-ports" onclick="showTab('ports')">Ports</button>
+    <button class="tab" id="tab-devices" onclick="showTab('devices')">Connected Devices</button>
+    <button class="tab" id="tab-issues" onclick="showTab('issues')">Issues</button>
+  </div>
+
+  <div class="summary" id="summary-cards">
+    <div class="metric"><div class="label">Switch</div><div class="value">-</div><div class="sub">Select a switch to begin</div></div>
+    <div class="metric"><div class="label">Peak Traffic</div><div class="value">0 Mbps</div><div class="sub">Historical peak</div></div>
+    <div class="metric"><div class="label">Critical Ports</div><div class="value">0</div><div class="sub">Health score below threshold</div></div>
+    <div class="metric"><div class="label">Devices Found</div><div class="value">0</div><div class="sub">MAC/IP/VLAN inventory</div></div>
+  </div>
+
+  <div id="ports-panel" class="section">
+    <div class="section-title">
+      <h3>PRTG-Style Port Sensors</h3>
+      <span class="pill" id="refresh-note">Manual refresh</span>
+    </div>
+    <div class="table-wrap" id="ports-content">
+      <div class="empty">Select a switch, then run analysis.</div>
+    </div>
+  </div>
+
+  <div id="devices-panel" class="section" style="display:none">
+    <div class="section-title">
+      <h3>Connected Endpoints</h3>
+      <span class="pill" id="device-stats">No discovery yet</span>
+    </div>
+    <div class="table-wrap" id="devices-content">
+      <div class="empty">Device discovery uses the switch MAC table, ARP, and VLAN data.</div>
+    </div>
+  </div>
+
+  <div id="issues-panel" class="section" style="display:none">
+    <div class="section-title">
+      <h3>Detected Issues</h3>
+      <span class="pill" id="issues-stats">No analysis yet</span>
+    </div>
+    <div id="issues-content" class="issues">
+      <div class="empty" style="grid-column:1/-1">No analysis yet.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let CURRENT_SW_ID = null;
+let CURRENT_SW_IP = null;
+let CURRENT_SW_HOST = null;
+let CURRENT_TAB = 'ports';
+let PORT_DATA = [];
+let DEVICE_DATA = [];
+(function initTheme(){
+  if(localStorage.getItem('noc-theme') === 'light') document.body.classList.add('light');
+})();
+
+setInterval(() => $('clk').textContent = new Date().toLocaleTimeString('en-GB'), 1000);
+
+function getCsrfToken() {
+  return document.cookie.split(';').find(v => v.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+function filterSwitchesByLocation() {
+  const locationId = $('location-sel').value;
+  const switchSelect = $('switch-sel');
+  Array.from(switchSelect.options).forEach((option, index) => {
+    if (!index) return;
+    option.hidden = !!locationId && option.dataset.location !== locationId;
+  });
+  switchSelect.value = '';
+  onSwitchSelect();
+}
+
+function onSwitchSelect() {
+  const select = $('switch-sel');
+  const option = select.options[select.selectedIndex];
+  CURRENT_SW_ID = select.value || null;
+  CURRENT_SW_IP = option?.dataset.ip || null;
+  CURRENT_SW_HOST = option?.dataset.host || null;
+
+  $('analyze-btn').disabled = !CURRENT_SW_ID;
+  $('scan-btn').disabled = !CURRENT_SW_ID;
+  $('test-btn').disabled = !CURRENT_SW_ID;
+  $('port-sel').innerHTML = '<option value="">Select Port</option>';
+}
+
+function showTab(tab) {
+  CURRENT_TAB = tab;
+  ['ports', 'devices', 'issues'].forEach(name => {
+    $(`tab-${name}`).classList.toggle('active', name === tab);
+    $(`${name}-panel`).style.display = name === tab ? 'block' : 'none';
+  });
+}
+
+function populatePortSelect(ports) {
+  $('port-sel').innerHTML = '<option value="">Select Port</option>' + ports.map(port => {
+    const status = port.current_status || {};
+    return `<option value="${escapeHtml(port.port)}">${escapeHtml(port.port)} (${status.speed_human || 'Unknown'})</option>`;
+  }).join('');
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const contentType = response.headers.get('content-type') || '';
+  const rawText = await response.text();
+
+  if (!contentType.includes('application/json')) {
+    if (rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
+      throw new Error('The server returned HTML instead of JSON. Check login/session state or backend errors.');
+    }
+    throw new Error(rawText.slice(0, 240) || 'Unexpected non-JSON response');
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(rawText);
+  } catch (error) {
+    throw new Error(`Invalid JSON response: ${error.message}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || `Request failed with status ${response.status}`);
+  }
+
+  return payload;
+}
+
+async function analyzePorts(isAutoRefresh = false) {
+  if (!CURRENT_SW_ID) return;
+  $('ports-content').innerHTML = `<div class="empty"><span class="spinner"></span> Collecting historical Mbps data...</div>`;
+  $('refresh-note').textContent = isAutoRefresh ? 'Refreshing now' : 'Refreshing now';
+
+  try {
+    const hours = $('hours-sel').value;
+    const payload = await fetchJson(`/api/all-ports-speed/${CURRENT_SW_ID}/?hours=${hours}`);
+    PORT_DATA = payload.ports || [];
+    populatePortSelect(PORT_DATA);
+    renderSummary();
+    renderPortsTable();
+    renderIssues();
+    $('refresh-note').textContent = `Time window: last ${hours}h`;
+  } catch (error) {
+    $('ports-content').innerHTML = `<div class="empty" style="color:var(--red)">Failed to load port analysis: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function discoverDevices(refreshArp = false) {
+  if (!CURRENT_SW_ID) return;
+  $('devices-content').innerHTML = `<div class="empty"><span class="spinner"></span> Building switch port inventory from MAC, ARP, and VLAN tables...</div>`;
+
+  try {
+    const payload = await fetchJson('/api/ip-scan/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({
+        switch_id: CURRENT_SW_ID,
+        network: $('scan-network').value,
+        refresh_arp: refreshArp
+      })
+    });
+    DEVICE_DATA = payload.devices || [];
+    renderDevices(payload);
+    renderSummary();
+  } catch (error) {
+    $('devices-content').innerHTML = `<div class="empty" style="color:var(--red)">Failed to discover devices: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderSummary() {
+  const criticalPorts = PORT_DATA.filter(item => item.health_score?.level === 'critical').length;
+  const peaks = PORT_DATA.map(item => Number(item.historical?.max_traffic_mbps || 0));
+  const peak = peaks.length ? Math.max(...peaks).toFixed(2) : '0.00';
+  const connectedPorts = PORT_DATA.filter(item => item.current_status?.status === 'connected').length;
+  const deviceCount = DEVICE_DATA.length;
+
+  $('summary-cards').innerHTML = `
+    <div class="metric">
+      <div class="label">Switch</div>
+      <div class="value">${escapeHtml(CURRENT_SW_HOST || '-')}</div>
+      <div class="sub">${escapeHtml(CURRENT_SW_IP || 'Select a switch')} • ${connectedPorts} active ports</div>
+    </div>
+    <div class="metric">
+      <div class="label">Peak Traffic</div>
+      <div class="value">${peak} Mbps</div>
+      <div class="sub">Highest measured total throughput in selected window</div>
+    </div>
+    <div class="metric">
+      <div class="label">Critical Ports</div>
+      <div class="value">${criticalPorts}</div>
+      <div class="sub">${PORT_DATA.length} analyzed sensors</div>
+    </div>
+    <div class="metric">
+      <div class="label">Devices Found</div>
+      <div class="value">${deviceCount}</div>
+      <div class="sub">${DEVICE_DATA.filter(d => d.ip_address !== 'Unresolved').length} with resolved IPs</div>
+    </div>
+  `;
+}
+
+function renderPortsTable() {
+  if (!PORT_DATA.length) {
+    $('ports-content').innerHTML = '<div class="empty">No port data was returned for this switch.</div>';
+    return;
+  }
+
+  const rows = PORT_DATA.map(item => {
+    const status = item.current_status || {};
+    const history = item.historical || {};
+    const util = Number(status.utilization_percent || 0);
+    const health = item.health_score || {};
+    const progressColor = util >= 90 ? 'var(--red)' : util >= 70 ? 'var(--amber)' : 'var(--green)';
+    const portId = JSON.stringify(item.port);
+    return `
+      <tr>
+        <td><strong>${escapeHtml(item.port)}</strong><div class="small">${escapeHtml(status.alias || 'No description')}</div></td>
+        <td>${escapeHtml(status.vlan_id ?? '-')}</td>
+        <td>${statusCell(status.status)}</td>
+        <td>${escapeHtml(status.speed_human || 'Unknown')}</td>
+        <td>${Number(status.traffic_mbps || 0).toFixed(2)}</td>
+        <td>${Number(history.avg_traffic_mbps || 0).toFixed(2)}</td>
+        <td>${Number(history.max_traffic_mbps || 0).toFixed(2)}</td>
+        <td>
+          <div class="progress"><span style="width:${Math.min(util,100)}%;background:${progressColor}"></span></div>
+          <div class="small">${util.toFixed(1)}%</div>
+        </td>
+        <td>${history.trend ? `<span class="badge info">${escapeHtml(history.trend)}</span>` : '-'}</td>
+        <td>${buildSparkline(history.samples || [])}</td>
+        <td><span class="badge ${healthBadgeClass(health.level)}">${Number(health.score || 0).toFixed(0)}%</span></td>
+        <td>
+          <div class="row-actions">
+            <button class="mini-btn" onclick='analyzeSinglePort(${portId})'>Details</button>
+            <button class="mini-btn" onclick='runPortTest(${portId})'>Live Test</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  $('ports-content').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>VLAN</th>
+          <th>Status</th>
+          <th>Speed</th>
+          <th>Current Mbps</th>
+          <th>Avg Mbps</th>
+          <th>Peak Mbps</th>
+          <th>Utilization</th>
+          <th>Trend</th>
+          <th>Traffic History</th>
+          <th>Health</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div id="live-result"></div>
+  `;
+}
+
+function renderDevices(payload) {
+  $('device-stats').textContent = `${payload.total_devices || 0} devices • ${payload.resolved_ip_count || 0} resolved IPs • ${payload.vlan_count || 0} VLANs`;
+
+  const groupedPorts = payload.ports || [];
+  if (!DEVICE_DATA.length && !groupedPorts.length) {
+    $('devices-content').innerHTML = '<div class="empty">No connected endpoints were mapped from the switch tables.</div>';
+    return;
+  }
+
+  $('devices-content').innerHTML = `
+    ${groupedPorts.length ? `
+    <div class="small" style="margin-bottom:10px">Per-port address inventory from switch-connected MAC, ARP, and VLAN entries</div>
+    <table style="margin-bottom:18px">
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>VLAN</th>
+          <th>IP Addresses</th>
+          <th>MAC Addresses</th>
+          <th>Count</th>
+          <th>Status</th>
+          <th>Current Mbps</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${groupedPorts.map(port => `
+          <tr>
+            <td><strong>${escapeHtml(port.port)}</strong>${port.alias ? `<div class="small">${escapeHtml(port.alias)}</div>` : ''}</td>
+            <td>${escapeHtml(port.vlan_id ?? '-')}</td>
+            <td>${port.ip_addresses?.length ? escapeHtml(port.ip_addresses.join(', ')) : '<span class="small">Unresolved</span>'}</td>
+            <td>${port.mac_addresses?.length ? escapeHtml(port.mac_addresses.join(', ')) : '-'}</td>
+            <td>${escapeHtml(port.device_count ?? 0)}</td>
+            <td>${statusCell(port.port_status)}</td>
+            <td>${Number(port.current_traffic_mbps || 0).toFixed(2)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>` : ''}
+    <div class="small" style="margin-bottom:10px">Endpoint rows</div>
+    <table>
+      <thead>
+        <tr>
+          <th>IP Address</th>
+          <th>MAC Address</th>
+          <th>VLAN</th>
+          <th>Port</th>
+          <th>Port Status</th>
+          <th>Port Speed</th>
+          <th>Current Mbps</th>
+          <th>Vendor</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${DEVICE_DATA.map(device => `
+          <tr>
+            <td>${escapeHtml(device.ip_address)}${device.ip_addresses?.length > 1 ? `<div class="small">${escapeHtml(device.ip_addresses.join(', '))}</div>` : ''}</td>
+            <td>${escapeHtml(device.mac_address)}</td>
+            <td>${escapeHtml(device.vlan_id ?? '-')}</td>
+            <td><strong>${escapeHtml(device.port)}</strong>${device.alias ? `<div class="small">${escapeHtml(device.alias)}</div>` : ''}</td>
+            <td>${statusCell(device.port_status)}</td>
+            <td>${escapeHtml(device.port_speed || '-')}</td>
+            <td>${Number(device.current_traffic_mbps || 0).toFixed(2)}</td>
+            <td>${escapeHtml(device.vendor || 'Unknown')}</td>
+            <td><span class="badge info">${escapeHtml(device.entry_type || 'learned')}</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderIssues() {
+  const issues = [];
+  PORT_DATA.forEach(item => {
+    (item.diagnosis || []).forEach(diag => {
+      if (diag.severity !== 'ok') issues.push({ port: item.port, ...diag });
+    });
+  });
+
+  $('issues-stats').textContent = `${issues.length} active findings`;
+  if (!issues.length) {
+    $('issues-content').innerHTML = '<div class="empty" style="grid-column:1/-1">No active issues detected in the selected timeframe.</div>';
+    return;
+  }
+
+  $('issues-content').innerHTML = issues.map(issue => `
+    <div class="issue ${escapeHtml(issue.severity)}">
+      <div class="head">
+        <strong>${escapeHtml(issue.port)}</strong>
+        <span class="badge ${healthBadgeClass(issue.severity)}">${escapeHtml(issue.severity)}</span>
+      </div>
+      <div>${escapeHtml(issue.message || '')}</div>
+      ${issue.detail ? `<div class="small" style="margin-top:8px">${escapeHtml(issue.detail)}</div>` : ''}
+      ${issue.cause ? `<div class="small" style="margin-top:6px">Cause: ${escapeHtml(issue.cause)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function analyzeSinglePort(portName) {
+  const container = $('live-result');
+  container.innerHTML = `<div class="live-box"><span class="spinner"></span> Loading deep analysis for ${escapeHtml(portName)}...</div>`;
+
+  try {
+    const hours = $('hours-sel').value;
+    const payload = await fetchJson(`/api/port-speed/${CURRENT_SW_ID}/${encodeURIComponent(portName)}/?hours=${hours}`);
+    const recommendations = (payload.recommendations || []).map(item => `<li>${escapeHtml(item.action)}: ${escapeHtml(item.details)}</li>`).join('');
+    const diagnosis = (payload.diagnosis || []).map(item => `<li>${escapeHtml(item.message)}</li>`).join('');
+
+    container.innerHTML = `
+      <div class="live-box">
+        <div class="section-title" style="margin-bottom:8px">
+          <h3>${escapeHtml(portName)} Details</h3>
+          <span class="pill">${Number(payload.current_status?.traffic_mbps || 0).toFixed(2)} Mbps current</span>
+        </div>
+        <div class="small">In: ${Number(payload.current_status?.in_mbps || 0).toFixed(2)} Mbps • Out: ${Number(payload.current_status?.out_mbps || 0).toFixed(2)} Mbps • Peak: ${Number(payload.historical?.max_traffic_mbps || 0).toFixed(2)} Mbps</div>
+        <div class="small" style="margin-top:8px">Diagnosis</div>
+        <ul>${diagnosis || '<li>No issues</li>'}</ul>
+        <div class="small" style="margin-top:8px">Recommendations</div>
+        <ul>${recommendations || '<li>No action required</li>'}</ul>
+      </div>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="live-box" style="color:var(--red)">Failed to load details: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function runSelectedPortTest() {
+  const portName = $('port-sel').value;
+  if (!portName) {
+    alert('Select a port first.');
+    return;
+  }
+  await runPortTest(portName);
+}
+
+async function runPortTest(portName) {
+  const targetIp = $('iperf-target').value.trim();
+  const container = $('live-result');
+  container.innerHTML = `
+    <div class="live-box">
+      <div class="section-title" style="margin-bottom:8px">
+        <h3>${escapeHtml(portName)} Live Test</h3>
+        <span class="pill">Running 12s sample</span>
+      </div>
+      <div class="small">Collecting live Mbps from switch counters${targetIp ? ` and probing iperf3 target ${escapeHtml(targetIp)}` : ''}.</div>
+      <div class="progress large"><span id="live-progress-bar" style="width:0%;background:var(--cyan)"></span></div>
+      <div class="small" id="live-progress-text" style="margin-top:8px">0%</div>
+    </div>
+  `;
+
+  const startedAt = Date.now();
+  const durationMs = 12000;
+  const progressTimer = setInterval(() => {
+    const elapsed = Math.min(Date.now() - startedAt, durationMs);
+    const percent = Math.round((elapsed / durationMs) * 100);
+    const bar = $('live-progress-bar');
+    const text = $('live-progress-text');
+    if (bar) bar.style.width = `${percent}%`;
+    if (text) text.textContent = `${percent}% • waiting for device counters`;
+  }, 400);
+
+  try {
+    const payload = await fetchJson(`/api/port-speed-test/${CURRENT_SW_ID}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({
+        port_name: portName,
+        target_ip: targetIp || null,
+        duration_seconds: 12,
+        interval_seconds: 2
+      })
+    });
+    clearInterval(progressTimer);
+    const passive = payload.passive || {};
+    const download = payload.download || {};
+    const upload = payload.upload || {};
+
+    container.innerHTML = `
+      <div class="live-box">
+        <div class="section-title" style="margin-bottom:8px">
+          <h3>${escapeHtml(portName)} Live Test</h3>
+          <span class="pill">${Number(payload.current_speed_mbps || 0).toFixed(2)} Mbps current</span>
+        </div>
+        <div class="small">Passive sample average: ${Number(payload.average_speed_mbps || 0).toFixed(2)} Mbps • Peak: ${Number(payload.peak_speed_mbps || 0).toFixed(2)} Mbps</div>
+        ${download.success || upload.success ? `<div class="small" style="margin-top:6px">iperf3 download: ${Number(download.speed_mbps || 0).toFixed(2)} Mbps • upload: ${Number(upload.speed_mbps || 0).toFixed(2)} Mbps</div>` : ''}
+        ${download.error ? `<div class="small" style="margin-top:6px;color:var(--amber)">iperf3: ${escapeHtml(download.error)}</div>` : ''}
+        <div class="live-samples">
+          <table>
+            <thead><tr><th>Time</th><th>In Mbps</th><th>Out Mbps</th><th>Total Mbps</th><th>Utilization</th></tr></thead>
+            <tbody>
+              ${(passive.samples || []).map(sample => `
+                <tr>
+                  <td>${escapeHtml(new Date(sample.time).toLocaleTimeString('en-GB'))}</td>
+                  <td>${Number(sample.in_mbps || 0).toFixed(2)}</td>
+                  <td>${Number(sample.out_mbps || 0).toFixed(2)}</td>
+                  <td>${Number(sample.total_mbps || 0).toFixed(2)}</td>
+                  <td>${Number(sample.utilization_percent || 0).toFixed(2)}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    clearInterval(progressTimer);
+    container.innerHTML = `<div class="live-box" style="color:var(--red)">Live test failed: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function buildSparkline(samples) {
+  if (!samples?.length) return '<span class="small">No history</span>';
+  const values = samples.map(item => Number(item.traffic_mbps || 0));
+  const max = Math.max(...values, 1);
+  const width = 150;
+  const height = 40;
+  const step = values.length > 1 ? width / (values.length - 1) : width;
+  const points = values.map((value, index) => {
+    const x = index * step;
+    const y = height - ((value / max) * (height - 4)) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+    <polyline fill="none" stroke="var(--cyan)" stroke-width="2" points="${points}"></polyline>
+  </svg>`;
+}
+
+function statusCell(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'connected' || normalized === 'up') return `<span class="status"><span class="dot up"></span>Up</span>`;
+  if (normalized === 'disabled' || normalized === 'down') return `<span class="status"><span class="dot down"></span>Down</span>`;
+  return `<span class="status"><span class="dot warn"></span>${escapeHtml(status || 'Unknown')}</span>`;
+}
+
+function healthBadgeClass(level) {
+  const value = String(level || '').toLowerCase();
+  if (value === 'critical') return 'critical';
+  if (value === 'warning') return 'warning';
+  return 'good';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
+}
+
+showTab('ports');
+</script>
+{% endblock %}

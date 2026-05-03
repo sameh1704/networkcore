@@ -11,7 +11,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.core.cache import cache
 from core.services.camera_identity_resolver import resolve_camera_identities
-
+from core.models import ARPTable
 log = logging.getLogger(__name__)
 
 

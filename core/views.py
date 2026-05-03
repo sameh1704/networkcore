@@ -1360,6 +1360,19 @@ def _fix_duplex(ifc):
     return fixes
 
 
+def _format_mac(mac_value):
+    """تنسيق عنوان MAC من قيمة SNMP (دالة مساعدة)"""
+    if isinstance(mac_value, bytes):
+        return ":".join(f"{b:02x}" for b in mac_value)
+    elif isinstance(mac_value, str):
+        # إذا كانت بصيغة hex string
+        mac_str = mac_value.replace(" ", "").replace("-", "").replace(".", "")
+        if len(mac_str) == 12:
+            return ":".join(mac_str[i:i+2] for i in range(0, 12, 2))
+        return mac_value
+    return str(mac_value)
+
+
 @require_GET
 def api_vlan_troubleshoot(request, switch_id):
     """
@@ -1818,3 +1831,147 @@ def _clear_switch_runtime_caches(ip_address: str) -> None:
         clear_cache(ip_address)
     except Exception:
         pass
+
+
+
+
+@require_GET
+@safe_json
+def api_test_arp(request, switch_id):
+    """اختبار ARP table - endpoint مؤقت للتشخيص"""
+    from core.services.snmp import snmp_walk_with_index
+    
+    sw = get_object_or_404(Switch, id=switch_id)
+    
+    try:
+        mac_rows = snmp_walk_with_index(sw.ip_address, sw.snmp_community, "1.3.6.1.2.1.4.22.1.2", timeout=5) or []
+        ip_rows = snmp_walk_with_index(sw.ip_address, sw.snmp_community, "1.3.6.1.2.1.4.22.1.3", timeout=5) or []
+        
+        ip_by_suffix = {sfx: str(val).strip() for sfx, val in ip_rows}
+        
+        arp_entries = []
+        for suffix, mac_val in mac_rows[:50]:  # أول 50 فقط للتشخيص
+            ip_addr = ip_by_suffix.get(suffix, "")
+            mac = _format_mac(mac_val)
+            if mac and ip_addr:
+                arp_entries.append({"mac": mac, "ip": ip_addr})
+        
+        return JsonResponse({
+            "mac_rows_count": len(mac_rows),
+            "ip_rows_count": len(ip_rows),
+            "sample_entries": arp_entries[:20],
+            "success": len(mac_rows) > 0
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e), "success": False})
+    
+    
+    
+    
+    
+    
+######################################################################################
+# core/views.py - أضف هذه الدوال
+
+from core.services.port_speed_analyzer import analyze_port_speed, analyze_all_ports
+from core.services.iperf_client import test_port_speed
+from core.services.ip_scanner import AdvancedIPScanner, quick_scan_range
+
+@api_view(["POST"])
+def api_ip_scan_quick(request):
+    """مسح سريع لنطاق 1-50"""
+    results = quick_scan_range("192.168.70.1", "192.168.70.50")
+    return JsonResponse(results, safe=False)
+
+@safe_json
+@api_cache(timeout=30)
+def api_port_speed_analysis(request, switch_id, port_name):
+    """
+    API لتحليل سرعة منفذ معين
+    
+    GET /api/port-speed/<switch_id>/<port_name>/?hours=24
+    """
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = int(request.GET.get("hours", 24))
+    
+    result = analyze_port_speed(sw, port_name, hours)
+    return JsonResponse(result)
+
+
+@safe_json
+@api_cache(timeout=30)
+def api_all_ports_speed(request, switch_id):
+    """
+    API لتحليل سرعة جميع منافذ السويتش
+    
+    GET /api/all-ports-speed/<switch_id>/?hours=24
+    """
+    sw = get_object_or_404(Switch, id=switch_id)
+    hours = int(request.GET.get("hours", 24))
+    
+    results = analyze_all_ports(sw, hours)
+    return JsonResponse({"ports": results, "total": len(results)})
+
+
+@api_view(["POST"])
+@safe_json
+def api_port_speed_test(request, switch_id):
+    """
+    API لاختبار السرعة الحقيقي عبر iperf
+    
+    POST /api/port-speed-test/<switch_id>/
+    body: {"port_name": "Gi1/0/1", "target_ip": "192.168.70.10"}
+    """
+    sw = get_object_or_404(Switch, id=switch_id)
+    data = request.data or {}
+    port_name = data.get("port_name")
+    target_ip = data.get("target_ip")
+    duration_seconds = int(data.get("duration_seconds", 12) or 12)
+    interval_seconds = int(data.get("interval_seconds", 2) or 2)
+
+    result = test_port_speed(
+        sw,
+        port_name,
+        target_ip,
+        duration_seconds=duration_seconds,
+        interval_seconds=interval_seconds,
+    )
+    return JsonResponse(result)
+
+
+@api_view(["POST"])
+@safe_json
+def api_ip_scan(request):
+    """
+    API لمسح IP متقدم
+    
+    POST /api/ip-scan/
+    body: {"network": "192.168.70.0/24"}
+    """
+    data = request.data or {}
+    switch_id = data.get("switch_id")
+    network = data.get("network", "192.168.70.0/24")
+    refresh_arp = bool(data.get("refresh_arp"))
+
+    scanner = AdvancedIPScanner()
+    if switch_id:
+        sw = get_object_or_404(Switch, id=switch_id)
+        results = scanner.discover_switch_devices(sw, network_cidr=network, refresh_arp=refresh_arp)
+    else:
+        results = scanner.scan_network(network)
+    return JsonResponse(results)
+
+
+def port_speed_analyzer_page(request):
+    """صفحة تحليل سرعة المنافذ"""
+    from core.models import Switch, Location
+    
+    locations = Location.objects.annotate(switch_count=Count("switch")).order_by("name")
+    switches = Switch.objects.select_related("location").order_by("location__name", "hostname")
+    
+    return render(request, "dashboard/port_speed_analyzer.html", {
+        "locations": locations,
+        "switches": switches,
+    })
+    
+    

@@ -177,6 +177,36 @@ function toggleTheme() {
   }
 }
 
+// ── Helper: Get CSRF Token ──
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+// ── Helper: Parse IP Range for display ──
+function parseDisplayRange(input) {
+  // تحقق إذا كان IP واحد
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(input)) {
+    return input;
+  }
+  // تحقق إذا كان Range (192.168.70.1-192.168.70.50)
+  if (/-/.test(input)) {
+    return input;
+  }
+  // CIDR
+  return input;
+}
+
 // ── Discovery Engine ──
 async function initiateDiscovery() {
   if (isScanning) return;
@@ -185,11 +215,21 @@ async function initiateDiscovery() {
   const network = document.getElementById('network').value;
   const community = document.getElementById('community').value;
   const method = document.getElementById('method').value;
+  
+  // Reset counters
+  foundCount = 0;
+  newCount = 0;
+  updCount = 0;
+  logCount = 0;
+  updateStats();
+  
+  // Clear previous results
+  document.getElementById('device-list').innerHTML = '';
 
   try {
     // 1. SNMP Auto Discovery
     if (method === 'snmp' || method === 'both') {
-      updateStatus("Scanning Network Range... (this may take 1-2 minutes)");
+      updateStatus(`Scanning ${parseDisplayRange(network)}... (may take 1-2 minutes)`);
       updateProgress(10);
       logCount++;
       document.getElementById('s-log').innerText = logCount;
@@ -200,14 +240,26 @@ async function initiateDiscovery() {
       try {
         const res = await fetch('/api/discover/', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+          headers: { 
+            'Content-Type': 'application/json', 
+            'X-CSRFToken': getCookie('csrftoken') 
+          },
           body: JSON.stringify({ network, community }),
           signal: controller.signal
         });
         clearTimeout(timer);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
         const data = await res.json();
-        processItems(data.discovered || data.switches || []);
+        console.log("Discovery response:", data);
+        
+        // معالجة البيانات من auto_discovery_api
+        processDiscoveryResults(data);
         updateProgress(method === 'both' ? 60 : 90);
+        
       } catch (e) {
         clearTimeout(timer);
         if (e.name === 'AbortError') {
@@ -220,52 +272,123 @@ async function initiateDiscovery() {
 
     // 2. Smart Discovery (CDP/LLDP)
     if (method === 'smart' || method === 'both') {
-      updateStatus("Analyzing Topology (CDP/LLDP)...");
+      updateStatus("Analyzing Topology via CDP/LLDP...");
       updateProgress(70);
       logCount++;
       document.getElementById('s-log').innerText = logCount;
 
-      const seedIp = network.split('/')[0];
+      // استخدم أول IP من النطاق كـ seed
+      let seedIp = network;
+      if (network.includes('/') || network.includes('-')) {
+        // إذا كان CIDR أو Range، خذ أول IP
+        seedIp = network.split('/')[0].split('-')[0];
+      }
+      
       const res = await fetch('/api/smart-discovery/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'X-CSRFToken': getCookie('csrftoken') 
+        },
         body: JSON.stringify({ seed_ip: seedIp, community })
       });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const data = await res.json();
-      processItems(data.discovered || []);
+      console.log("Smart discovery response:", data);
+      
+      // معالجة البيانات من smart_discovery_api
+      if (data.discovered && data.discovered.length) {
+        processSmartDiscoveryResults(data.discovered);
+      }
     }
 
     updateStatus("Discovery Completed Successfully");
     updateProgress(100);
+    
+    // تحديث الإحصائيات النهائية
+    setTimeout(() => {
+      updateStats();
+    }, 100);
+    
   } catch (err) {
-    console.error(err);
+    console.error("Discovery error:", err);
     updateStatus("Discovery Failed: " + err.message, true);
   } finally {
     stopUI();
   }
 }
 
-function processItems(items) {
+function processDiscoveryResults(data) {
+  // auto_discovery_api تعيد discovered في المفتاح "discovered"
+  const discovered = data.discovered || [];
   const container = document.getElementById('device-list');
-  if (foundCount === 0) container.innerHTML = '';
-
-  items.forEach(item => {
+  
+  if (discovered.length === 0 && foundCount === 0) {
+    container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--txt3); font-size:12px;">No devices found. Check SNMP community and network range.</div>';
+  }
+  
+  discovered.forEach(item => {
     foundCount++;
     if (item.created) newCount++; else updCount++;
     
     const card = document.createElement('div');
     card.className = 'dev-card';
+    card.setAttribute('data-ip', item.ip);
     card.innerHTML = `
       <div style="width:10px; height:10px; border-radius:50%; background:${item.created ? 'var(--cyan)' : 'var(--green)'}"></div>
       <div style="flex:1">
-        <div style="font-size:13px; font-weight:bold">${item.hostname || 'Unknown'}</div>
-        <div style="font-size:11px; color:var(--txt3)">${item.ip} • ${item.model || 'Generic Device'}</div>
+        <div style="font-size:13px; font-weight:bold; color:var(--cyan)">${escapeHtml(item.hostname) || 'Unknown'}</div>
+        <div style="font-size:11px; color:var(--txt3)">${item.ip} • ${item.model || 'Network Device'}</div>
+        ${item.serial ? `<div style="font-size:10px; color:var(--txt3); margin-top:2px">SN: ${escapeHtml(item.serial)}</div>` : ''}
       </div>
       <span class="badge ${item.created ? 'badge-new' : 'badge-upd'}">${item.created ? 'NEW' : 'UPDATED'}</span>
     `;
     container.prepend(card);
   });
+  
   updateStats();
+}
+
+function processSmartDiscoveryResults(items) {
+  const container = document.getElementById('device-list');
+  
+  items.forEach(item => {
+    // التحقق إذا كان الجهاز موجوداً بالفعل في القائمة (تجنب التكرار)
+    const existing = document.querySelector(`.dev-card[data-ip="${item.ip}"]`);
+    if (existing) return;
+    
+    foundCount++;
+    newCount++;
+    
+    const card = document.createElement('div');
+    card.className = 'dev-card';
+    card.setAttribute('data-ip', item.ip);
+    card.innerHTML = `
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--amber)"></div>
+      <div style="flex:1">
+        <div style="font-size:13px; font-weight:bold; color:var(--amber)">${escapeHtml(item.hostname) || 'Unknown'}</div>
+        <div style="font-size:11px; color:var(--txt3)">${item.ip} • Discovered via CDP/LLDP</div>
+      </div>
+      <span class="badge badge-new">FROM NEIGHBOR</span>
+    `;
+    container.prepend(card);
+  });
+  
+  updateStats();
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function updateStats() {
@@ -275,32 +398,56 @@ function updateStats() {
 }
 
 function updateProgress(val) {
-  document.getElementById('progFill').style.width = val + '%';
+  const progFill = document.getElementById('progFill');
+  if (progFill) progFill.style.width = Math.min(100, val) + '%';
 }
 
 function updateStatus(msg, isError = false) {
   const s = document.getElementById('sonarStatus');
-  s.innerText = msg;
-  s.style.color = isError ? 'var(--red)' : 'var(--txt3)';
+  if (s) {
+    s.innerText = msg;
+    s.style.color = isError ? 'var(--red)' : 'var(--txt3)';
+  }
 }
 
 function startUI() {
   isScanning = true;
-  document.getElementById('scanBtn').disabled = true;
-  document.getElementById('progWrap').style.display = 'block';
-  document.getElementById('sweepGroup').classList.add('sonar-spinning');
+  const scanBtn = document.getElementById('scanBtn');
+  const progWrap = document.getElementById('progWrap');
+  const sweepGroup = document.getElementById('sweepGroup');
+  
+  if (scanBtn) scanBtn.disabled = true;
+  if (progWrap) progWrap.style.display = 'block';
+  if (sweepGroup) sweepGroup.classList.add('sonar-spinning');
 }
 
 function stopUI() {
   isScanning = false;
-  document.getElementById('scanBtn').disabled = false;
-  document.getElementById('sweepGroup').classList.remove('sonar-spinning');
+  const scanBtn = document.getElementById('scanBtn');
+  const sweepGroup = document.getElementById('sweepGroup');
+  
+  if (scanBtn) scanBtn.disabled = false;
+  if (sweepGroup) sweepGroup.classList.remove('sonar-spinning');
 }
 
 function clearResults() {
-  document.getElementById('device-list').innerHTML = '<div style="padding:40px; text-align:center; color:var(--txt3); font-size:12px;">Results cleared.</div>';
-  foundCount = 0; newCount = 0; updCount = 0; updateStats();
+  const container = document.getElementById('device-list');
+  if (container) {
+    container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--txt3); font-size:12px;">Results cleared. Click START DISCOVERY to begin.</div>';
+  }
+  foundCount = 0;
+  newCount = 0;
+  updCount = 0;
+  logCount = 0;
+  updateStats();
+  updateProgress(0);
+  updateStatus("Ready");
 }
-</script>
 
+// ── Auto-run when page loads (optional) ──
+document.addEventListener('DOMContentLoaded', function() {
+  // Set default values if needed
+  console.log("Discovery page loaded");
+});
+</script>
 {% endblock %}

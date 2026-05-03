@@ -251,6 +251,20 @@ urlpatterns += [
     path("camera/api/export-identities/<int:switch_id>/", views.api_camera_identity_export_csv, name="api_camera_identity_export"),
     path("camera/api/refresh/<int:switch_id>/", views.api_camera_refresh, name="api_camera_refresh"),
 
+    
+    path("camera/api/test-arp/<int:switch_id>/", views.api_test_arp, name="api_test_arp"),
+    
+    
+    #############################################################################################
+    # core/urls.py - أضف هذه المسارات
+
+# Port Speed Analysis
+    path("port-speed/", views.port_speed_analyzer_page, name="port_speed_analyzer"),
+    path("api/port-speed/<int:switch_id>/<path:port_name>/", views.api_port_speed_analysis, name="api_port_speed"),
+    path("api/all-ports-speed/<int:switch_id>/", views.api_all_ports_speed, name="api_all_ports_speed"),
+    path("api/port-speed-test/<int:switch_id>/", views.api_port_speed_test, name="api_port_speed_test"),
+    path("api/ip-scan/", views.api_ip_scan, name="api_ip_scan"),
+    path("api/ip-scan/quick/", views.api_ip_scan_quick, name="api_ip_scan_quick"),
 
 
 ]
